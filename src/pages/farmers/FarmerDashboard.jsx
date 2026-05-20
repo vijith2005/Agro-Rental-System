@@ -1,18 +1,22 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import "../../styles/FarmerDashboard.css";
 import heroImage from "../../assets/farmerbg.jpg";
-import equipmentOne from "../../assets/hero.jpg";
-import equipmentTwo from "../../assets/farmerbg.jpg";
+import { listEquipment } from "../../api/equipmentApi";
+import { listRentalsByFarmer } from "../../api/rentalApi";
+import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
+import { getCurrentUser } from "../../utils/session";
+import { EQUIPMENT_UPDATED_EVENT } from "../../utils/equipmentEvents";
+import { RENTAL_UPDATED_EVENT } from "../../utils/rentalEvents";
 
 const FarmDashboard = () => {
   const [displayName, setDisplayName] = useState("Farmer");
+  const [equipments, setEquipments] = useState(() => getStored(STORAGE_KEYS.equipments, []));
+  const [rentals, setRentals] = useState(() => getStored(STORAGE_KEYS.rentals, []));
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    const currentUser =
-      JSON.parse(localStorage.getItem("currentUser")) ||
-      JSON.parse(sessionStorage.getItem("currentUser")) ||
-      JSON.parse(localStorage.getItem("user"));
+    const currentUser = getCurrentUser();
 
     if (currentUser?.name) {
       setDisplayName(currentUser.name);
@@ -21,11 +25,78 @@ const FarmDashboard = () => {
     }
   }, []);
 
-  const stats = [
-    { value: "24", label: "Machines" },
-    { value: "12", label: "Active rentals" },
-    { value: "7", label: "Active bookings" },
-  ];
+  useEffect(() => {
+    let active = true;
+
+    const loadEquipment = async () => {
+      try {
+        const data = await listEquipment({ page: 0, size: 100 });
+        const content = data?.content || [];
+        if (!active) return;
+        setEquipments(content);
+        setStored(STORAGE_KEYS.equipments, content);
+        setLoadError("");
+      } catch {
+        if (active) {
+          setLoadError("Using cached equipment for now.");
+        }
+      }
+    };
+
+    loadEquipment();
+    const handleEquipmentUpdated = () => {
+      loadEquipment();
+    };
+
+    window.addEventListener(EQUIPMENT_UPDATED_EVENT, handleEquipmentUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener(EQUIPMENT_UPDATED_EVENT, handleEquipmentUpdated);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadRentals = async () => {
+      const currentUser = getCurrentUser();
+      const farmerId = currentUser?.email || "farmer@demo.com";
+
+      try {
+        const data = await listRentalsByFarmer(farmerId);
+        const content = Array.isArray(data) ? data : [];
+        if (!active) return;
+        setRentals(content);
+        setStored(STORAGE_KEYS.rentals, content);
+      } catch {
+        if (!active) return;
+        setRentals(getStored(STORAGE_KEYS.rentals, []));
+      }
+    };
+
+    loadRentals();
+    const handleRentalUpdated = () => loadRentals();
+    window.addEventListener(RENTAL_UPDATED_EVENT, handleRentalUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener(RENTAL_UPDATED_EVENT, handleRentalUpdated);
+    };
+  }, []);
+
+  const stats = useMemo(
+    () => [
+      { value: equipments.length.toString(), label: "Machines" },
+      {
+        value: rentals.filter((item) => ["APPROVED", "SCHEDULED", "IN_TRANSIT", "DELIVERED", "IN_USE"].includes((item.status || "").toUpperCase())).length.toString(),
+        label: "Active rentals",
+      },
+      {
+        value: rentals.filter((item) => ["REQUESTED", "APPROVED", "SCHEDULED"].includes((item.status || "").toUpperCase())).length.toString(),
+        label: "Active bookings",
+      },
+    ],
+    [equipments.length, rentals]
+  );
 
   const quickActions = [
     { title: "Explore Equipment", subtitle: "Browse premium machinery", icon: "↗", tone: "mint", link: "/farmer/equipment" },
@@ -36,11 +107,14 @@ const FarmDashboard = () => {
     { title: "Profile", subtitle: "Manage your details", icon: "⚙", tone: "amber", link: "/profile" },
   ];
 
-  const featuredEquipment = [
-    { name: "Tractor 35HP", description: "Powerful 35HP tractor suitable for ploughing and general farm work", day: "₹800/day", week: "₹5200/week", month: "₹20000/month", image: equipmentOne },
-    { name: "Combine Harvester", description: "Modern combine harvester for wheat and rice harvesting", day: "₹2500/day", week: "₹16000/week", month: "₹60000/month", image: equipmentTwo },
-    { name: "Crop Cutting Machine", description: "Efficient crop cutting machine for paddy and wheat", day: "₹600/day", week: "₹3800/week", month: "₹14000/month", image: equipmentOne },
-  ];
+  const featuredEquipment = useMemo(
+    () =>
+      (equipments || [])
+        .slice()
+        .sort((left, right) => (Number(right.rating) || 0) - (Number(left.rating) || 0))
+        .slice(0, 3),
+    [equipments]
+  );
 
   return (
     <div className="dashboard agr-dash">
@@ -52,6 +126,8 @@ const FarmDashboard = () => {
             <p className="description">Access premium equipment to optimize your farm operations</p>
           </div>
         </section>
+
+        {loadError && <div className="alert alert-warning mt-3">{loadError}</div>}
 
         <div className="stats stats-pill">
           {stats.map((stat) => (
@@ -94,25 +170,27 @@ const FarmDashboard = () => {
               <h3 className="section-title">Featured Equipment</h3>
               <p className="section-subtitle">Top-rated agricultural machinery in your area</p>
             </div>
-            <Link to="/farmer/equipment" className="view-all">View All Equipment →</Link>
+            <Link to="/farmer/equipment" className="view-all">
+              View All Equipment →
+            </Link>
           </div>
 
           <div className="equipment-grid">
             {featuredEquipment.map((item) => (
-              <div className="equipment-card" key={item.name}>
+              <div className="equipment-card" key={item.id}>
                 <div
                   className="equipment-image"
-                  style={{ backgroundImage: `url(${item.image})` }}
+                  style={{ backgroundImage: `url(${item.imageUrl || heroImage})` }}
                 />
                 <div className="equipment-body">
                   <h4 className="equipment-title">{item.name}</h4>
                   <p className="equipment-desc">{item.description}</p>
                   <div className="price-pill">
-                    <span>{item.day}</span>
+                    <span>Rs {item.day}/day</span>
                     <span className="dot">•</span>
-                    <span>{item.week}</span>
+                    <span>Rs {item.week}/week</span>
                     <span className="dot">•</span>
-                    <span>{item.month}</span>
+                    <span>Rs {item.month}/month</span>
                   </div>
                   <Link to="/farmer/equipment" className="rent-now">
                     Rent Now →

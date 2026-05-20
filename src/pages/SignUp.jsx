@@ -5,7 +5,14 @@ import { Container, Row, Col, Card, Form, Button, Alert, Spinner } from "react-b
 import "bootstrap/dist/css/bootstrap.min.css";
 import bgImage from "../assets/hero.jpg";
 import SiteFooter from "../components/SiteFooter";
-import { routeByRole } from "../utils/auth";
+import {
+  mapAuthUserToSessionUser,
+  mergeProfileIntoUser,
+  routeByRole,
+} from "../utils/auth";
+import { registerUser } from "../api/authApi";
+import { ensureMyProfile, syncMyProfile } from "../api/profileApi";
+import { pushAuthHistory, saveSession, syncCurrentUser } from "../utils/session";
 
 const Tractor = () => <i className="bi bi-tractor fs-1"></i>;
 const Mail = () => <i className="bi bi-envelope"></i>;
@@ -71,32 +78,32 @@ export default function SignUpPage() {
     }
 
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
 
-    const userData = {
-      name: formData.name.trim(),
-      email: formData.email.trim().toLowerCase(),
-      phone: formData.phone.trim(),
-      password: formData.password,
-      confirmPassword: formData.confirmPassword,
-      role: formData.role,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      const authResponse = await registerUser(formData);
+      const sessionUser = mapAuthUserToSessionUser(authResponse.user);
 
-    const users = JSON.parse(localStorage.getItem("users")) || [];
-    const existing = users.find((user) => user.email?.toLowerCase() === userData.email);
-    if (existing) {
-      setError("An account with this email already exists");
+      saveSession(sessionUser, authResponse.accessToken, true);
+
+      try {
+        await syncMyProfile(sessionUser);
+        const profile = await ensureMyProfile(sessionUser);
+        syncCurrentUser(mergeProfileIntoUser(sessionUser, profile));
+      } catch (profileError) {
+        console.warn("Profile service sync skipped during signup.", profileError);
+      }
+
+      pushAuthHistory("REGISTER");
+      navigate(routeByRole(sessionUser.role));
+    } catch (apiError) {
+      setError(
+        apiError?.response?.data?.message ||
+          Object.values(apiError?.response?.data?.fieldErrors || {})[0] ||
+          "Unable to create account right now."
+      );
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    users.push(userData);
-    localStorage.setItem("users", JSON.stringify(users));
-    localStorage.setItem("user", JSON.stringify(userData));
-
-    navigate(routeByRole(userData.role));
-    setIsLoading(false);
   };
 
   const styles = {
