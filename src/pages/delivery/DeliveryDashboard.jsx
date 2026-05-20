@@ -1,25 +1,56 @@
-﻿import React from "react";
-import { Card, Col, Row, Table, Badge, Form, Button } from "react-bootstrap";
-import ImageUpload from "../../components/ImageUpload";
+import React, { useEffect, useMemo, useState } from "react";
+import { Badge, Card, Col, Row, Table } from "react-bootstrap";
 import "../../styles/FarmerDashboard.css";
+import { listRentalsByAgent } from "../../api/rentalApi";
+import { getCurrentUser } from "../../utils/session";
+import { RENTAL_UPDATED_EVENT } from "../../utils/rentalEvents";
 
 function DeliveryDashboard() {
-  const summary = [
-    { label: "Deliveries today", value: 6 },
-    { label: "Completed", value: 18 },
-    { label: "Pending pickups", value: 3 },
-    { label: "Returns scheduled", value: 4 },
-  ];
+  const [rentals, setRentals] = useState([]);
+  const [loadError, setLoadError] = useState("");
+  const agentKey = getCurrentUser()?.email || "delivery@demo.com";
 
-  const assignments = [
-    { id: "R-2204", equipment: "Tractor 35HP", farmer: "Sahana", pickup: "Coimbatore", drop: "Tiruppur", status: "Pickup" },
-    { id: "R-2206", equipment: "Combine Harvester", farmer: "Arjun", pickup: "Erode", drop: "Salem", status: "In Transit" },
-  ];
+  useEffect(() => {
+    let active = true;
+
+    const loadRentals = async () => {
+      try {
+        const data = await listRentalsByAgent(agentKey);
+        if (!active) return;
+        setRentals(Array.isArray(data) ? data : []);
+        setLoadError("");
+      } catch {
+        if (active) setLoadError("Using cached assignments because the backend is unavailable.");
+      }
+    };
+
+    loadRentals();
+    const onUpdated = () => loadRentals();
+    window.addEventListener(RENTAL_UPDATED_EVENT, onUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener(RENTAL_UPDATED_EVENT, onUpdated);
+    };
+  }, [agentKey]);
+
+  const summary = useMemo(() => {
+    const delivered = rentals.filter((r) => (r.status || "").toUpperCase() === "DELIVERED").length;
+    const activeDeliveries = rentals.filter((r) => ["SCHEDULED", "IN_TRANSIT", "DELIVERED", "IN_USE"].includes((r.status || "").toUpperCase())).length;
+    const pendingPickups = rentals.filter((r) => (r.status || "").toUpperCase() === "SCHEDULED").length;
+    const returns = rentals.filter((r) => ["RETURN_SCHEDULED", "RETURNED", "COMPLETED"].includes((r.status || "").toUpperCase())).length;
+    return [
+      { label: "Deliveries assigned", value: rentals.length },
+      { label: "Active deliveries", value: activeDeliveries },
+      { label: "Completed", value: delivered },
+      { label: "Returns scheduled", value: returns || pendingPickups },
+    ];
+  }, [rentals]);
 
   return (
     <div className="agr-page delivery-dashboard motion-page">
-      <div className="delivery-title">Delivery Operations</div>
-      <div className="delivery-subtitle">Manage pickups, deliveries, and returns with real-time task updates.</div>
+      <div className="delivery-title">Agent Operations</div>
+      <div className="delivery-subtitle">Manage pickups, deliveries, usage logs, and return inspections.</div>
+      {loadError && <div className="alert alert-warning mt-3">{loadError}</div>}
 
       <Row className="g-3 mt-2">
         {summary.map((card) => (
@@ -34,165 +65,42 @@ function DeliveryDashboard() {
         ))}
       </Row>
 
-      <Row className="g-3 mt-1">
-        <Col lg={7}>
-          <Card className="shadow-sm h-100">
-            <Card.Body>
-              <Card.Title className="h6">Assigned Deliveries</Card.Title>
-              <Table responsive className="delivery-table mt-3">
-                <thead>
-                  <tr>
-                    <th>Rental ID</th>
-                    <th>Equipment</th>
-                    <th>Farmer</th>
-                    <th>Pickup</th>
-                    <th>Delivery</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {assignments.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.id}</td>
-                      <td>{item.equipment}</td>
-                      <td>{item.farmer}</td>
-                      <td>{item.pickup}</td>
-                      <td>{item.drop}</td>
-                      <td>
-                        <Badge bg={item.status === "Pickup" ? "warning" : "success"}>{item.status}</Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </Table>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col lg={5}>
-          <Card className="shadow-sm h-100">
-            <Card.Body>
-              <Card.Title className="h6">Route Navigation</Card.Title>
-              <div className="route-card mt-3">
-                <div className="route-point">
-                  <div className="route-dot"></div>
-                  <div>
-                    <div className="fw-semibold">Pickup</div>
-                    <div className="text-muted small">Coimbatore • 12:30 PM</div>
-                  </div>
-                </div>
-                <div className="route-line"></div>
-                <div className="route-point">
-                  <div className="route-dot"></div>
-                  <div>
-                    <div className="fw-semibold">Drop-off</div>
-                    <div className="text-muted small">Tiruppur • ETA 2:15 PM</div>
-                  </div>
-                </div>
-                <div className="route-meta">Distance 42 km • ETA 1h 45m</div>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-
-      <Row className="g-3 mt-1">
-        <Col lg={6}>
-          <Card className="shadow-sm h-100">
-            <Card.Body>
-              <Card.Title className="h6">Pickup Confirmation</Card.Title>
-              <Form className="mt-3">
-                <Form.Group className="mb-2">
-                  <Form.Label>Equipment condition</Form.Label>
-                  <Form.Control as="textarea" rows={2} placeholder="Describe current condition" />
-                </Form.Group>
-                <Row className="g-2">
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Fuel level</Form.Label>
-                      <Form.Control type="text" placeholder="e.g. 70%" />
-                    </Form.Group>
-                  </Col>
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Machine hours</Form.Label>
-                      <Form.Control type="number" placeholder="e.g. 450" />
-                    </Form.Group>
-                  </Col>
-                </Row>
-                <Button variant="success" className="mt-3 w-100">Confirm Pickup</Button>
-              </Form>
-            </Card.Body>
-          </Card>
-        </Col>
-        <Col lg={6}>
-          <Card className="shadow-sm h-100">
-            <Card.Body>
-              <Card.Title className="h6">Delivery Confirmation</Card.Title>
-              <Form className="mt-3">
-                <Form.Group className="mb-2">
-                  <Form.Label>Delivery timestamp</Form.Label>
-                  <Form.Control type="datetime-local" />
-                </Form.Group>
-                <Form.Group className="mb-2">
-                  <Form.Label>Farmer signature</Form.Label>
-                  <Form.Control type="text" placeholder="Collected digitally" />
-                </Form.Group>
-                <Button variant="success" className="w-100">Confirm Delivery</Button>
-              </Form>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-
-      <Row className="g-3 mt-1">
-        <Col lg={6}>
-          <ImageUpload label="Upload Pickup Photos" />
-        </Col>
-        <Col lg={6}>
-          <Card className="shadow-sm h-100">
-            <Card.Body>
-              <Card.Title className="h6">Return Inspection</Card.Title>
-              <Form className="mt-3">
-                <Form.Group className="mb-2">
-                  <Form.Label>Condition report</Form.Label>
-                  <Form.Control as="textarea" rows={2} placeholder="Describe any damage" />
-                </Form.Group>
-                <Form.Group className="mb-2">
-                  <Form.Label>Damage notes</Form.Label>
-                  <Form.Control type="text" placeholder="Add notes" />
-                </Form.Group>
-                <Button variant="outline-success" className="w-100">Submit Inspection</Button>
-              </Form>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-
       <Card className="shadow-sm mt-3">
         <Card.Body>
-          <Card.Title className="h6">Delivery History</Card.Title>
+          <Card.Title className="h6">Assigned Rentals</Card.Title>
           <Table responsive className="delivery-table mt-3">
             <thead>
               <tr>
-                <th>Rental</th>
+                <th>Rental ID</th>
                 <th>Equipment</th>
+                <th>Farmer</th>
+                <th>Pickup</th>
+                <th>Drop</th>
                 <th>Status</th>
-                <th>Date</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td>R-2102</td>
-                <td>Sprayer 450L</td>
-                <td><Badge bg="success">Completed</Badge></td>
-                <td>Mar 08</td>
-              </tr>
-              <tr>
-                <td>R-2094</td>
-                <td>Water Pump</td>
-                <td><Badge bg="secondary">Returned</Badge></td>
-                <td>Mar 03</td>
-              </tr>
+              {rentals.length === 0 && (
+                <tr>
+                  <td colSpan="6" className="text-center text-muted py-4">
+                    No assigned deliveries yet.
+                  </td>
+                </tr>
+              )}
+              {rentals.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.id}</td>
+                  <td>{item.equipmentName}</td>
+                  <td>{item.farmerName || item.farmerId}</td>
+                  <td>{item.schedule?.pickupDateTime || item.pickupLocation || "N/A"}</td>
+                  <td>{item.schedule?.deliveryLocation || item.deliveryLocation || "N/A"}</td>
+                  <td>
+                    <Badge bg={(item.status || "").toUpperCase() === "DELIVERED" ? "success" : "warning"}>
+                      {item.status || "SCHEDULED"}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </Table>
         </Card.Body>

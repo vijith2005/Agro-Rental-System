@@ -5,24 +5,16 @@ import { Container, Row, Col, Card, Form, Button, Alert, Spinner } from "react-b
 import "bootstrap/dist/css/bootstrap.min.css";
 import bgImage from "../assets/hero.jpg";
 import SiteFooter from "../components/SiteFooter";
-import { routeByRole } from "../utils/auth";
+import { mapAuthUserToSessionUser, mergeProfileIntoUser, routeByRole } from "../utils/auth";
+import { loginUser } from "../api/authApi";
+import { ensureMyProfile } from "../api/profileApi";
+import { saveSession, syncCurrentUser, pushAuthHistory } from "../utils/session";
 
 const Tractor = () => <i className="bi bi-tractor fs-1"></i>;
 const Mail = () => <i className="bi bi-envelope"></i>;
 const Lock = () => <i className="bi bi-lock"></i>;
 const Eye = () => <i className="bi bi-eye"></i>;
 const EyeOff = () => <i className="bi bi-eye-slash"></i>;
-
-const saveSession = (user, token, rememberMe) => {
-  localStorage.removeItem("currentUser");
-  localStorage.removeItem("agro_token");
-  sessionStorage.removeItem("currentUser");
-  sessionStorage.removeItem("agro_token");
-
-  const storage = rememberMe ? localStorage : sessionStorage;
-  storage.setItem("currentUser", JSON.stringify(user));
-  storage.setItem("agro_token", token);
-};
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -52,41 +44,30 @@ export default function LoginPage() {
     setError("");
     setIsLoading(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    try {
+      const authResponse = await loginUser(formData);
+      const sessionUser = mapAuthUserToSessionUser(authResponse.user);
 
-    const users = JSON.parse(localStorage.getItem("users")) || [];
-    const legacyUser = JSON.parse(localStorage.getItem("user"));
-    const allUsers = users.length > 0 ? users : legacyUser ? [legacyUser] : [];
+      saveSession(sessionUser, authResponse.accessToken, rememberMe);
 
-    const matchedUser = allUsers.find(
-      (user) =>
-        user.email?.toLowerCase() === formData.email.trim().toLowerCase() &&
-        user.password === formData.password
-    );
+      try {
+        const profile = await ensureMyProfile(sessionUser);
+        syncCurrentUser(mergeProfileIntoUser(sessionUser, profile));
+      } catch (profileError) {
+        console.warn("Profile service sync skipped during login.", profileError);
+      }
 
-    if (!matchedUser) {
-      setError("Invalid email or password");
+      pushAuthHistory("LOGIN");
+      navigate(routeByRole(sessionUser.role));
+    } catch (apiError) {
+      setError(
+        apiError?.response?.data?.message ||
+          apiError?.response?.data?.fieldErrors?.email ||
+          "Unable to sign in. Please check your credentials."
+      );
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    const role = matchedUser.role || "farmer";
-    const normalizedUser = {
-      ...matchedUser,
-      role,
-    };
-    const fakeToken = window.btoa(
-      `${normalizedUser.email || "user"}:${normalizedUser.role}:${Date.now()}`
-    );
-
-    saveSession(normalizedUser, fakeToken, rememberMe);
-
-    const history = JSON.parse(localStorage.getItem("authHistory")) || [];
-    history.push({ type: "LOGIN", at: new Date().toISOString() });
-    localStorage.setItem("authHistory", JSON.stringify(history));
-
-    navigate(routeByRole(normalizedUser.role));
-    setIsLoading(false);
   };
 
   const styles = {

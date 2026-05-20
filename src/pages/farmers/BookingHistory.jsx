@@ -1,17 +1,34 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
+import { createPayment } from "../../api/paymentApi";
+import { listRentalsByFarmer, updateRentalStatus } from "../../api/rentalApi";
 import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
+import { getCurrentUser } from "../../utils/session";
+import { RENTAL_UPDATED_EVENT, notifyRentalUpdated } from "../../utils/rentalEvents";
+import { notifyPaymentUpdated } from "../../utils/paymentEvents";
 
 const TABS = ["All", "Pending", "Confirmed", "Cancelled", "Completed"];
 
 const statusClass = (status) => {
   const key = (status || "").toLowerCase();
-  if (key === "confirmed") return "badge bg-success text-white";
+  if (key === "paid" || key === "confirmed") return "badge bg-success text-white";
   if (key === "pending") return "badge bg-warning text-dark";
   if (key === "cancelled") return "badge bg-danger";
   if (key === "completed") return "badge bg-secondary";
   return "badge bg-light text-dark";
+};
+
+const normalizeUiStatus = (status) => {
+  const key = (status || "").toUpperCase();
+  if (key === "REQUESTED") return "Pending";
+  if (key === "APPROVED" || key === "SCHEDULED" || key === "IN_TRANSIT" || key === "DELIVERED" || key === "IN_USE" || key === "PAID") {
+    return "Confirmed";
+  }
+  if (key === "COMPLETED" || key === "RETURNED") return "Completed";
+  if (key === "CANCELLED" || key === "REJECTED" || key === "DAMAGED") return "Cancelled";
+  return status || "Pending";
 };
 
 const BookingHistory = () => {
@@ -22,12 +39,39 @@ const BookingHistory = () => {
   const pageSize = 6;
 
   useEffect(() => {
-    const rentals = getStored(STORAGE_KEYS.rentals, []);
-    const normalized = rentals.map((r) => ({
-      ...r,
-      status: r.status || "Pending",
-    }));
-    setBookings(normalized);
+    let active = true;
+
+    const loadBookings = async () => {
+      const currentUser = getCurrentUser();
+      const farmerId = currentUser?.email || "farmer@demo.com";
+
+      try {
+        const data = await listRentalsByFarmer(farmerId);
+        if (!active) return;
+        const content = (Array.isArray(data) ? data : []).map((item) => ({
+          ...item,
+          status: normalizeUiStatus(item.status),
+        }));
+        setBookings(content);
+        setStored(STORAGE_KEYS.rentals, content);
+      } catch {
+        if (!active) return;
+        const rentals = getStored(STORAGE_KEYS.rentals, []);
+        const normalized = rentals.map((r) => ({
+          ...r,
+          status: r.status || "Pending",
+        }));
+        setBookings(normalized);
+      }
+    };
+
+    loadBookings();
+    const onRentalUpdated = () => loadBookings();
+    window.addEventListener(RENTAL_UPDATED_EVENT, onRentalUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener(RENTAL_UPDATED_EVENT, onRentalUpdated);
+    };
   }, []);
 
   const filtered = useMemo(() => {
@@ -57,36 +101,108 @@ const BookingHistory = () => {
   const openCancel = (booking) => setCancelModal({ open: true, booking });
   const closeCancel = () => setCancelModal({ open: false, booking: null });
 
-  const confirmCancel = () => {
+  const confirmCancel = async () => {
     if (!cancelModal.booking) return;
-    const updated = bookings.map((b) =>
-      b.id === cancelModal.booking.id ? { ...b, status: "Cancelled" } : b
-    );
-    setBookings(updated);
-    setStored(STORAGE_KEYS.rentals, updated);
+    try {
+      const updatedRental = await updateRentalStatus(cancelModal.booking.id, {
+        status: "CANCELLED",
+        note: "Cancelled from farmer booking history",
+      });
+      const updated = bookings.map((b) =>
+        b.id === cancelModal.booking.id ? { ...updatedRental, status: normalizeUiStatus(updatedRental.status) } : b
+      );
+      setBookings(updated);
+      setStored(STORAGE_KEYS.rentals, updated);
+      notifyRentalUpdated();
+    } catch {
+      const updated = bookings.map((b) => (b.id === cancelModal.booking.id ? { ...b, status: "Cancelled" } : b));
+      setBookings(updated);
+      setStored(STORAGE_KEYS.rentals, updated);
+      notifyRentalUpdated();
+    }
     closeCancel();
   };
 
-  const handlePay = (id) => {
- 
-    const updated = bookings.map((b) =>
-      b.id === id ? { ...b, status: "Confirmed" } : b
-    );
-    setBookings(updated);
-    setStored(STORAGE_KEYS.rentals, updated);
+  const handlePay = async (id) => {
+    const currentUser = getCurrentUser();
+    const rental = bookings.find((item) => item.id === id);
+    if (!rental) return;
+
+    const paymentPayload = {
+      rentalId: rental.id,
+      equipmentId: rental.equipmentId,
+      equipmentName: rental.equipmentName,
+      farmerId: currentUser?.email || "farmer@demo.com",
+      farmerName: currentUser?.name || rental.farmerName || "Farmer",
+      ownerId: rental.ownerId || "",
+      ownerName: rental.ownerName || "",
+      amount: Number(rental.totalAmount || 0),
+      paymentMethod: rental.paymentMethod || "UPI",
+      gateway: rental.paymentMethod === "Razorpay" ? "Razorpay" : "Manual",
+      note: "Paid from booking history",
+      status: "PAID",
+    };
+
+    try {
+      const paymentRecord = await createPayment(paymentPayload);
+      const cachedPayments = getStored(STORAGE_KEYS.payments, []);
+      setStored(STORAGE_KEYS.payments, [
+        paymentRecord,
+        ...cachedPayments.filter((payment) => payment.rentalId !== id),
+      ]);
+    } catch {
+      const now = new Date().toISOString();
+      const cachedPayments = getStored(STORAGE_KEYS.payments, []);
+      setStored(STORAGE_KEYS.payments, [
+        {
+          id: `pay-${Date.now()}`,
+          ...paymentPayload,
+          currency: "INR",
+          transactionId: `txn-${Date.now()}`,
+          receiptNumber: `rcpt-${Date.now()}`,
+          paidAt: now,
+          initiatedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        },
+        ...cachedPayments.filter((payment) => payment.rentalId !== id),
+      ]);
+    }
+    notifyPaymentUpdated();
+
+    try {
+      const updatedRental = await updateRentalStatus(id, { status: "PAID", note: "Marked as paid" });
+      const updated = bookings.map((b) => (b.id === id ? { ...updatedRental, status: normalizeUiStatus(updatedRental.status) } : b));
+      setBookings(updated);
+      setStored(STORAGE_KEYS.rentals, updated);
+      notifyRentalUpdated();
+    } catch {
+      const updated = bookings.map((b) => (b.id === id ? { ...b, status: "Confirmed" } : b));
+      setBookings(updated);
+      setStored(STORAGE_KEYS.rentals, updated);
+      notifyRentalUpdated();
+    }
   };
 
-  const handleComplete = (id) => {
-    const updated = bookings.map((b) =>
-      b.id === id ? { ...b, status: "Completed" } : b
-    );
-    setBookings(updated);
-    setStored(STORAGE_KEYS.rentals, updated);
+  const handleComplete = async (id) => {
+    try {
+      const updatedRental = await updateRentalStatus(id, { status: "COMPLETED", note: "Completed by farmer" });
+      const updated = bookings.map((b) =>
+        b.id === id ? { ...updatedRental, status: normalizeUiStatus(updatedRental.status) } : b
+      );
+      setBookings(updated);
+      setStored(STORAGE_KEYS.rentals, updated);
+      notifyRentalUpdated();
+    } catch {
+      const updated = bookings.map((b) => (b.id === id ? { ...b, status: "Completed" } : b));
+      setBookings(updated);
+      setStored(STORAGE_KEYS.rentals, updated);
+      notifyRentalUpdated();
+    }
   };
 
   return (
     <div className="agr-page">
-      
       <div className="d-flex flex-column gap-3 mb-4">
         <div>
           <h2 className="agr-h1 mb-1">My Bookings</h2>
@@ -148,13 +264,13 @@ const BookingHistory = () => {
                   <tr key={b.id}>
                     <td>
                       <div className="fw-semibold text-primary">{b.equipmentName || "Equipment"}</div>
-                      <div className="text-muted small">{b.location || "—"}</div>
+                      <div className="text-muted small">{b.location || "-"}</div>
                     </td>
                     <td className="text-muted small">{b.ownerName || "Owner"}</td>
-                    <td>{b.startDate || "—"}</td>
-                    <td>{b.endDate || "—"}</td>
+                    <td>{b.startDate || "-"}</td>
+                    <td>{b.endDate || "-"}</td>
                     <td>{days}</td>
-                    <td className="fw-bold">₹{total}</td>
+                    <td className="fw-bold">Rs {total}</td>
                     <td>
                       <span className={statusClass(status)}>{status}</span>
                     </td>
@@ -174,6 +290,12 @@ const BookingHistory = () => {
                           Pay Now
                         </button>
                       )}
+                      <Link
+                        className="btn btn-outline-primary btn-sm"
+                        to={`/farmer/messages?rentalId=${encodeURIComponent(b.id)}`}
+                      >
+                        Message Owner
+                      </Link>
                       {status.toLowerCase() === "completed" && (
                         <button className="btn btn-outline-primary btn-sm">Review</button>
                       )}

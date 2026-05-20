@@ -1,6 +1,7 @@
 const STORAGE_KEYS = {
   equipments: "equipments",
   rentals: "rentals",
+  payments: "payments",
   invoices: "invoices",
   chats: "chats",
 };
@@ -125,6 +126,7 @@ export const seedData = () => {
 
   setStored(STORAGE_KEYS.equipments, equipments);
   setStored(STORAGE_KEYS.rentals, []);
+  setStored(STORAGE_KEYS.payments, []);
   setStored(STORAGE_KEYS.invoices, []);
 
   try {

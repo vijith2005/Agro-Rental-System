@@ -1,47 +1,39 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Col, Form, Row, Table } from "react-bootstrap";
+import { Alert, Badge, Button, Col, Form, Row, Spinner, Table } from "react-bootstrap";
+import { changeMyPassword, getMyAuthUser, updateMyAuthUser } from "../api/authApi";
+import { getApiErrorMessage } from "../api/http";
+import {
+  ensureMyProfile,
+  syncMyProfile,
+  updateMyProfile as updateMyProfileDetails,
+} from "../api/profileApi";
 import "../styles/FarmerDashboard.css";
 import "../styles/FarmerModules.css";
-import { normalizeRole } from "../utils/auth";
+import {
+  mapAuthUserToSessionUser,
+  mergeProfileIntoUser,
+  normalizeRole,
+} from "../utils/auth";
+import {
+  getCurrentUser,
+  hasPersistentSession,
+  pushAuthHistory,
+  saveSession,
+  syncCurrentUser,
+} from "../utils/session";
 
-const getCurrentUser = () =>
-  JSON.parse(localStorage.getItem("currentUser")) ||
-  JSON.parse(sessionStorage.getItem("currentUser")) ||
-  JSON.parse(localStorage.getItem("user")) ||
-  null;
-
-const getUsers = () => {
-  try {
-    return JSON.parse(localStorage.getItem("users")) || [];
-  } catch {
-    return [];
-  }
-};
-
-const persistCurrentUser = (user) => {
-  if (localStorage.getItem("currentUser")) {
-    localStorage.setItem("currentUser", JSON.stringify(user));
-  }
-  if (sessionStorage.getItem("currentUser")) {
-    sessionStorage.setItem("currentUser", JSON.stringify(user));
-  }
-  localStorage.setItem("user", JSON.stringify(user));
-};
-
-const updateUsersCollection = (nextUser, previousEmail) => {
-  const users = getUsers();
-  const index = users.findIndex(
-    (item) => item.email?.toLowerCase() === previousEmail?.toLowerCase()
-  );
-
-  if (index >= 0) {
-    users[index] = { ...users[index], ...nextUser };
-  } else {
-    users.push(nextUser);
-  }
-
-  localStorage.setItem("users", JSON.stringify(users));
-};
+const buildProfileState = (user) => ({
+  name: user?.name || "",
+  email: user?.email || "",
+  role: normalizeRole(user?.role),
+  phone: user?.phone || "",
+  state: user?.state || "",
+  district: user?.district || "",
+  farmSize: user?.farmSize || "",
+  crops: user?.crops || "",
+  address: user?.address || "",
+  status: user?.status || "",
+});
 
 const activityLabel = (item) => item.type || item.action || "LOGIN";
 
@@ -67,27 +59,18 @@ const roleAccent = (role) => {
 };
 
 const Profile = () => {
-  const baseUser = useMemo(() => getCurrentUser(), []);
-  const [sourceEmail, setSourceEmail] = useState(baseUser?.email || "");
-  const [profile, setProfile] = useState({
-    name: baseUser?.name || "",
-    email: baseUser?.email || "",
-    role: normalizeRole(baseUser?.role),
-    phone: baseUser?.phone || "",
-    state: baseUser?.state || "",
-    district: baseUser?.district || "",
-    farmSize: baseUser?.farmSize || "",
-    crops: baseUser?.crops || "",
-    address: baseUser?.address || "",
-    password: baseUser?.password || "",
-  });
-  const [message, setMessage] = useState({ type: "", text: "" });
+  const cachedUser = useMemo(() => getCurrentUser(), []);
+  const [profile, setProfile] = useState(() => buildProfileState(cachedUser));
+  const [message, setMessage] = useState({ variant: "", text: "" });
   const [passwordForm, setPasswordForm] = useState({
     current: "",
     next: "",
     confirm: "",
   });
   const [activity, setActivity] = useState([]);
+  const [isBootstrapping, setIsBootstrapping] = useState(Boolean(cachedUser));
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
 
   useEffect(() => {
     try {
@@ -97,6 +80,53 @@ const Profile = () => {
       setActivity([]);
     }
   }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadProfile = async () => {
+      if (!cachedUser) {
+        setIsBootstrapping(false);
+        return;
+      }
+
+      try {
+        const authUser = await getMyAuthUser();
+        const sessionUser = mapAuthUserToSessionUser(authUser);
+        const remoteProfile = await ensureMyProfile(sessionUser);
+        const mergedUser = mergeProfileIntoUser(sessionUser, remoteProfile);
+
+        if (!isActive) {
+          return;
+        }
+
+        syncCurrentUser(mergedUser);
+        setProfile(buildProfileState(mergedUser));
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+
+        setMessage({
+          variant: "warning",
+          text: getApiErrorMessage(
+            error,
+            "Unable to load the latest profile details. Showing the saved session data instead."
+          ),
+        });
+      } finally {
+        if (isActive) {
+          setIsBootstrapping(false);
+        }
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      isActive = false;
+    };
+  }, [cachedUser]);
 
   const initials = useMemo(() => {
     const seed = profile.name || profile.email || "AG";
@@ -114,7 +144,7 @@ const Profile = () => {
     const { name, value } = event.target;
     setProfile((prev) => ({ ...prev, [name]: value }));
     if (message.text) {
-      setMessage({ type: "", text: "" });
+      setMessage({ variant: "", text: "" });
     }
   };
 
@@ -122,85 +152,114 @@ const Profile = () => {
     const { name, value } = event.target;
     setPasswordForm((prev) => ({ ...prev, [name]: value }));
     if (message.text) {
-      setMessage({ type: "", text: "" });
+      setMessage({ variant: "", text: "" });
     }
   };
 
-  const handleSaveProfile = (event) => {
+  const handleSaveProfile = async (event) => {
     event.preventDefault();
 
     if (!profile.name.trim() || !profile.email.trim()) {
-      setMessage({ type: "danger", text: "Name and email are required." });
+      setMessage({ variant: "danger", text: "Name and email are required." });
       return;
     }
 
-    const nextUser = {
-      ...baseUser,
-      ...profile,
-      name: profile.name.trim(),
-      email: profile.email.trim().toLowerCase(),
-      phone: profile.phone.trim(),
-      state: profile.state.trim(),
-      district: profile.district.trim(),
-      farmSize: profile.farmSize,
-      crops: profile.crops.trim(),
-      address: profile.address.trim(),
-      role: normalizeRole(profile.role),
-    };
-
-    const otherUsers = getUsers().filter(
-      (item) => item.email?.toLowerCase() !== sourceEmail.toLowerCase()
-    );
-    const duplicate = otherUsers.some(
-      (item) => item.email?.toLowerCase() === nextUser.email.toLowerCase()
-    );
-
-    if (duplicate) {
-      setMessage({ type: "danger", text: "That email is already used by another account." });
+    if (!/\S+@\S+\.\S+/.test(profile.email.trim())) {
+      setMessage({ variant: "danger", text: "Please enter a valid email address." });
       return;
     }
 
-    persistCurrentUser(nextUser);
-    updateUsersCollection(nextUser, sourceEmail);
-    setSourceEmail(nextUser.email);
-    setProfile((prev) => ({ ...prev, email: nextUser.email, role: nextUser.role }));
-    setMessage({ type: "success", text: "Profile updated successfully." });
+    if (!/^[0-9]{10,15}$/.test(profile.phone.trim())) {
+      setMessage({ variant: "danger", text: "Phone must contain 10 to 15 digits." });
+      return;
+    }
+
+    setIsSavingProfile(true);
+    setMessage({ variant: "", text: "" });
+
+    try {
+      const rememberMe = hasPersistentSession();
+      const authResponse = await updateMyAuthUser({
+        name: profile.name,
+        email: profile.email,
+        phone: profile.phone,
+      });
+      const authSessionUser = mapAuthUserToSessionUser(authResponse.user);
+
+      saveSession(authSessionUser, authResponse.accessToken, rememberMe);
+
+      let nextUser = authSessionUser;
+
+      try {
+        await syncMyProfile(authSessionUser);
+        const updatedProfile = await updateMyProfileDetails({
+          name: profile.name,
+          phone: profile.phone,
+          address: profile.address,
+          state: profile.state,
+          district: profile.district,
+          farmSize: profile.farmSize,
+          crops: profile.crops,
+        });
+
+        nextUser = mergeProfileIntoUser(authSessionUser, updatedProfile);
+        syncCurrentUser(nextUser);
+        setMessage({ variant: "success", text: "Profile updated successfully." });
+      } catch (profileError) {
+        syncCurrentUser(authSessionUser);
+        setMessage({
+          variant: "warning",
+          text: `Account details were updated, but profile details could not be fully synced. ${getApiErrorMessage(
+            profileError,
+            "Please try saving the profile again."
+          )}`,
+        });
+      }
+
+      setProfile(buildProfileState(nextUser));
+      pushAuthHistory("PROFILE_UPDATED");
+    } catch (error) {
+      setMessage({
+        variant: "danger",
+        text: getApiErrorMessage(error, "Unable to update your profile right now."),
+      });
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
-  const handleChangePassword = (event) => {
+  const handleChangePassword = async (event) => {
     event.preventDefault();
 
-    const users = getUsers();
-    const storedUser =
-      users.find((item) => item.email?.toLowerCase() === sourceEmail.toLowerCase()) || baseUser;
-    const storedPassword = storedUser?.password || profile.password;
-
     if (!passwordForm.current || !passwordForm.next || !passwordForm.confirm) {
-      setMessage({ type: "danger", text: "Fill in all password fields." });
-      return;
-    }
-    if (passwordForm.current !== storedPassword) {
-      setMessage({ type: "danger", text: "Current password is incorrect." });
-      return;
-    }
-    if (passwordForm.next.length < 6) {
-      setMessage({ type: "danger", text: "New password must be at least 6 characters." });
-      return;
-    }
-    if (passwordForm.next !== passwordForm.confirm) {
-      setMessage({ type: "danger", text: "New password and confirm password do not match." });
+      setMessage({ variant: "danger", text: "Fill in all password fields." });
       return;
     }
 
-    const nextUser = { ...storedUser, ...profile, password: passwordForm.next };
-    persistCurrentUser(nextUser);
-    updateUsersCollection(nextUser, sourceEmail);
-    setProfile((prev) => ({ ...prev, password: passwordForm.next }));
-    setPasswordForm({ current: "", next: "", confirm: "" });
-    setMessage({ type: "success", text: "Password changed successfully." });
+    setIsSavingPassword(true);
+    setMessage({ variant: "", text: "" });
+
+    try {
+      await changeMyPassword({
+        currentPassword: passwordForm.current,
+        newPassword: passwordForm.next,
+        confirmPassword: passwordForm.confirm,
+      });
+
+      setPasswordForm({ current: "", next: "", confirm: "" });
+      setMessage({ variant: "success", text: "Password changed successfully." });
+      pushAuthHistory("PASSWORD_CHANGED");
+    } catch (error) {
+      setMessage({
+        variant: "danger",
+        text: getApiErrorMessage(error, "Unable to change your password right now."),
+      });
+    } finally {
+      setIsSavingPassword(false);
+    }
   };
 
-  if (!baseUser) {
+  if (!cachedUser) {
     return (
       <div className="agr-page profile-page">
         <div className="agr-panel">
@@ -233,6 +292,11 @@ const Profile = () => {
               <Badge bg={roleAccent(profile.role)} className="text-uppercase px-3 py-2">
                 {profile.role}
               </Badge>
+              {profile.status ? (
+                <Badge bg="secondary" className="text-uppercase px-3 py-2">
+                  {profile.status}
+                </Badge>
+              ) : null}
               <span className="text-muted">{profile.email}</span>
             </div>
           </div>
@@ -244,18 +308,27 @@ const Profile = () => {
           <div className="agr-panel h-100">
             <div className="d-flex justify-content-between align-items-center mb-4">
               <h5 className="mb-0">Profile Information</h5>
+              {isBootstrapping ? (
+                <div className="text-muted small d-flex align-items-center gap-2">
+                  <Spinner animation="border" size="sm" />
+                  Refreshing profile...
+                </div>
+              ) : null}
             </div>
 
-            {message.text ? (
-              <Alert variant={message.type === "success" ? "success" : "danger"}>{message.text}</Alert>
-            ) : null}
+            {message.text ? <Alert variant={message.variant || "info"}>{message.text}</Alert> : null}
 
             <Form onSubmit={handleSaveProfile}>
               <Row className="g-3">
                 <Col md={6}>
                   <Form.Group>
                     <Form.Label>Full Name</Form.Label>
-                    <Form.Control name="name" value={profile.name} onChange={handleProfileChange} />
+                    <Form.Control
+                      name="name"
+                      value={profile.name}
+                      onChange={handleProfileChange}
+                      disabled={isSavingProfile}
+                    />
                   </Form.Group>
                 </Col>
                 <Col md={6}>
@@ -266,25 +339,41 @@ const Profile = () => {
                       name="email"
                       value={profile.email}
                       onChange={handleProfileChange}
+                      disabled={isSavingProfile}
                     />
                   </Form.Group>
                 </Col>
                 <Col md={6}>
                   <Form.Group>
                     <Form.Label>Phone</Form.Label>
-                    <Form.Control name="phone" value={profile.phone} onChange={handleProfileChange} />
+                    <Form.Control
+                      name="phone"
+                      value={profile.phone}
+                      onChange={handleProfileChange}
+                      disabled={isSavingProfile}
+                    />
                   </Form.Group>
                 </Col>
                 <Col md={6}>
                   <Form.Group>
                     <Form.Label>State</Form.Label>
-                    <Form.Control name="state" value={profile.state} onChange={handleProfileChange} />
+                    <Form.Control
+                      name="state"
+                      value={profile.state}
+                      onChange={handleProfileChange}
+                      disabled={isSavingProfile}
+                    />
                   </Form.Group>
                 </Col>
                 <Col md={6}>
                   <Form.Group>
                     <Form.Label>District</Form.Label>
-                    <Form.Control name="district" value={profile.district} onChange={handleProfileChange} />
+                    <Form.Control
+                      name="district"
+                      value={profile.district}
+                      onChange={handleProfileChange}
+                      disabled={isSavingProfile}
+                    />
                   </Form.Group>
                 </Col>
                 <Col md={6}>
@@ -294,6 +383,7 @@ const Profile = () => {
                       name={isFarmer ? "farmSize" : "address"}
                       value={isFarmer ? profile.farmSize : profile.address}
                       onChange={handleProfileChange}
+                      disabled={isSavingProfile}
                     />
                   </Form.Group>
                 </Col>
@@ -306,14 +396,34 @@ const Profile = () => {
                         value={profile.crops}
                         onChange={handleProfileChange}
                         placeholder="e.g., Paddy, Maize"
+                        disabled={isSavingProfile}
                       />
                     </Form.Group>
                   </Col>
-                ) : null}
+                ) : (
+                  <Col md={12}>
+                    <Form.Group>
+                      <Form.Label>Address</Form.Label>
+                      <Form.Control
+                        name="address"
+                        value={profile.address}
+                        onChange={handleProfileChange}
+                        disabled={isSavingProfile}
+                      />
+                    </Form.Group>
+                  </Col>
+                )}
               </Row>
 
-              <Button type="submit" className="mt-4 agr-btn-primary">
-                Save Changes
+              <Button type="submit" className="mt-4 agr-btn-primary" disabled={isSavingProfile}>
+                {isSavingProfile ? (
+                  <>
+                    <Spinner animation="border" size="sm" className="me-2" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
               </Button>
             </Form>
           </div>
@@ -330,6 +440,7 @@ const Profile = () => {
                   name="current"
                   value={passwordForm.current}
                   onChange={handlePasswordChange}
+                  disabled={isSavingPassword}
                 />
               </Form.Group>
               <Form.Group className="mb-3">
@@ -339,6 +450,7 @@ const Profile = () => {
                   name="next"
                   value={passwordForm.next}
                   onChange={handlePasswordChange}
+                  disabled={isSavingPassword}
                 />
               </Form.Group>
               <Form.Group className="mb-3">
@@ -348,10 +460,18 @@ const Profile = () => {
                   name="confirm"
                   value={passwordForm.confirm}
                   onChange={handlePasswordChange}
+                  disabled={isSavingPassword}
                 />
               </Form.Group>
-              <Button type="submit" variant="outline-dark">
-                Update Password
+              <Button type="submit" variant="outline-dark" disabled={isSavingPassword}>
+                {isSavingPassword ? (
+                  <>
+                    <Spinner animation="border" size="sm" className="me-2" />
+                    Updating...
+                  </>
+                ) : (
+                  "Update Password"
+                )}
               </Button>
             </Form>
           </div>
@@ -373,7 +493,7 @@ const Profile = () => {
                       <td>{activityLabel(item)}</td>
                       <td>{activityTime(item)}</td>
                       <td>
-                        <Badge bg="success">LOGIN</Badge>
+                        <Badge bg="success">RECORDED</Badge>
                       </td>
                     </tr>
                   ))

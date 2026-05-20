@@ -1,40 +1,65 @@
-﻿import React, { useMemo, useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
+import { approveRental, listRentalsByOwner } from "../../api/rentalApi";
 import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
+import { getCurrentUser } from "../../utils/session";
+import { RENTAL_UPDATED_EVENT, notifyRentalUpdated } from "../../utils/rentalEvents";
 
 const OwnerRequests = () => {
   const [page, setPage] = useState(1);
   const pageSize = 5;
   const [rentals, setRentals] = useState(getStored(STORAGE_KEYS.rentals, []));
-  const [invoices, setInvoices] = useState(getStored(STORAGE_KEYS.invoices, []));
-  const equipments = getStored(STORAGE_KEYS.equipments, []);
+  const [loadError, setLoadError] = useState("");
 
-  const currentUser =
-    JSON.parse(localStorage.getItem("currentUser")) ||
-    JSON.parse(sessionStorage.getItem("currentUser")) ||
-    JSON.parse(localStorage.getItem("user"));
+  const currentUser = getCurrentUser();
   const ownerKey = currentUser?.email || "owner@demo.com";
 
-  const requestList = rentals.filter((rental) => {
-    const equipment = equipments.find((item) => item.id === rental.equipmentId);
-    if (!equipment || !equipment.ownerId) return true;
-    return equipment.ownerId === ownerKey;
-  });
+  useEffect(() => {
+    let active = true;
 
-  const approveRequest = (rentalId) => {
-    const nextRentals = rentals.map((rental) =>
-      rental.id === rentalId ? { ...rental, status: "APPROVED" } : rental
-    );
-    setRentals(nextRentals);
-    setStored(STORAGE_KEYS.rentals, nextRentals);
+    const loadRentals = async () => {
+      try {
+        const data = await listRentalsByOwner(ownerKey);
+        const content = Array.isArray(data) ? data : [];
+        if (!active) return;
+        setRentals(content);
+        setStored(STORAGE_KEYS.rentals, content);
+        setLoadError("");
+      } catch {
+        if (active) {
+          setLoadError("Using cached rentals because the backend is unavailable.");
+        }
+      }
+    };
 
-    const nextInvoices = invoices.map((invoice) =>
-      invoice.rentalId === rentalId ? { ...invoice, status: "PENDING" } : invoice
-    );
-    setInvoices(nextInvoices);
-    setStored(STORAGE_KEYS.invoices, nextInvoices);
+    loadRentals();
+    const onRentalUpdated = () => loadRentals();
+    window.addEventListener(RENTAL_UPDATED_EVENT, onRentalUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener(RENTAL_UPDATED_EVENT, onRentalUpdated);
+    };
+  }, [ownerKey]);
+
+  const requestList = rentals.filter((rental) => (rental.ownerId || "").toLowerCase() === ownerKey.toLowerCase());
+
+  const approveRequest = async (rentalId) => {
+    try {
+      const updated = await approveRental(rentalId, { approvalNote: "Approved from owner dashboard" });
+      const nextRentals = rentals.map((rental) => (rental.id === rentalId ? updated : rental));
+      setRentals(nextRentals);
+      setStored(STORAGE_KEYS.rentals, nextRentals);
+      notifyRentalUpdated();
+    } catch {
+      const nextRentals = rentals.map((rental) =>
+        rental.id === rentalId ? { ...rental, status: "APPROVED" } : rental
+      );
+      setRentals(nextRentals);
+      setStored(STORAGE_KEYS.rentals, nextRentals);
+      notifyRentalUpdated();
+    }
   };
 
   const totalPages = Math.max(1, Math.ceil(requestList.length / pageSize));
@@ -59,6 +84,7 @@ const OwnerRequests = () => {
 
   return (
     <div className="agr-page owner-dashboard">
+      {loadError && <div className="alert alert-warning mb-3">{loadError}</div>}
       <div className="page-header">
         <div>
           <div className="page-title">Booking Requests</div>
@@ -79,7 +105,7 @@ const OwnerRequests = () => {
                 <div>
                   <div className="equipment-name">{rental.equipmentName}</div>
                   <div className="list-meta">
-                    {rental.startDate} to {rental.endDate} • ₹{rental.totalAmount}
+                    {rental.startDate} to {rental.endDate} • Rs {rental.totalAmount}
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -93,14 +119,23 @@ const OwnerRequests = () => {
                   ) : (
                     <span className="inline-btn">Approved</span>
                   )}
+                  <Link to={`/owner/messages?rentalId=${encodeURIComponent(rental.id)}`} className="inline-btn">
+                    Message
+                  </Link>
                 </div>
               </div>
             ))}
           </div>
           <div className="messages-pagination">
-            <div className="page-info">Page {page} of {totalPages}</div>
+            <div className="page-info">
+              Page {page} of {totalPages}
+            </div>
             <div className="page-actions">
-              <button className="page-btn" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page === 1}>
+              <button
+                className="page-btn"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={page === 1}
+              >
                 Prev
               </button>
               {visiblePages.map((pageNumber) => (
@@ -112,7 +147,11 @@ const OwnerRequests = () => {
                   {pageNumber}
                 </button>
               ))}
-              <button className="page-btn" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={page === totalPages}>
+              <button
+                className="page-btn"
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={page === totalPages}
+              >
                 Next
               </button>
             </div>
