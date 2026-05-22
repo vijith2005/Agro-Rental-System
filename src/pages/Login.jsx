@@ -6,23 +6,18 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import bgImage from "../assets/hero.jpg";
 import SiteFooter from "../components/SiteFooter";
 import { routeByRole } from "../utils/auth";
+import {
+  authApi,
+  authErrorMessage,
+  normalizeAuthUser,
+  storeAuthSession,
+} from "../utils/authApi";
 
 const Tractor = () => <i className="bi bi-tractor fs-1"></i>;
 const Mail = () => <i className="bi bi-envelope"></i>;
 const Lock = () => <i className="bi bi-lock"></i>;
 const Eye = () => <i className="bi bi-eye"></i>;
 const EyeOff = () => <i className="bi bi-eye-slash"></i>;
-
-const saveSession = (user, token, rememberMe) => {
-  localStorage.removeItem("currentUser");
-  localStorage.removeItem("agro_token");
-  sessionStorage.removeItem("currentUser");
-  sessionStorage.removeItem("agro_token");
-
-  const storage = rememberMe ? localStorage : sessionStorage;
-  storage.setItem("currentUser", JSON.stringify(user));
-  storage.setItem("agro_token", token);
-};
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -52,41 +47,31 @@ export default function LoginPage() {
     setError("");
     setIsLoading(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    try {
+      const response = await authApi.post("/auth/login", {
+        email: formData.email.trim(),
+        password: formData.password,
+      });
 
-    const users = JSON.parse(localStorage.getItem("users")) || [];
-    const legacyUser = JSON.parse(localStorage.getItem("user"));
-    const allUsers = users.length > 0 ? users : legacyUser ? [legacyUser] : [];
+      const normalizedUser = normalizeAuthUser(response.data?.user);
+      const token = response.data?.accessToken;
 
-    const matchedUser = allUsers.find(
-      (user) =>
-        user.email?.toLowerCase() === formData.email.trim().toLowerCase() &&
-        user.password === formData.password
-    );
+      if (!normalizedUser || !token) {
+        throw new Error("Unexpected login response from the server");
+      }
 
-    if (!matchedUser) {
-      setError("Invalid email or password");
+      storeAuthSession(normalizedUser, token, rememberMe);
+
+      const history = JSON.parse(localStorage.getItem("authHistory")) || [];
+      history.push({ type: "LOGIN", at: new Date().toISOString() });
+      localStorage.setItem("authHistory", JSON.stringify(history));
+
+      navigate(routeByRole(normalizedUser.role));
+    } catch (err) {
+      setError(authErrorMessage(err, "Invalid email or password"));
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    const role = matchedUser.role || "farmer";
-    const normalizedUser = {
-      ...matchedUser,
-      role,
-    };
-    const fakeToken = window.btoa(
-      `${normalizedUser.email || "user"}:${normalizedUser.role}:${Date.now()}`
-    );
-
-    saveSession(normalizedUser, fakeToken, rememberMe);
-
-    const history = JSON.parse(localStorage.getItem("authHistory")) || [];
-    history.push({ type: "LOGIN", at: new Date().toISOString() });
-    localStorage.setItem("authHistory", JSON.stringify(history));
-
-    navigate(routeByRole(normalizedUser.role));
-    setIsLoading(false);
   };
 
   const styles = {

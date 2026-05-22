@@ -6,6 +6,13 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import bgImage from "../assets/hero.jpg";
 import SiteFooter from "../components/SiteFooter";
 import { routeByRole } from "../utils/auth";
+import {
+  authApi,
+  authErrorMessage,
+  normalizeAuthUser,
+  roleToApiRole,
+  storeAuthSession,
+} from "../utils/authApi";
 
 const Tractor = () => <i className="bi bi-tractor fs-1"></i>;
 const Mail = () => <i className="bi bi-envelope"></i>;
@@ -71,32 +78,29 @@ export default function SignUpPage() {
     }
 
     setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    try {
+      const response = await authApi.post("/auth/register", {
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phone: formData.phone.trim(),
+        password: formData.password,
+        role: roleToApiRole(formData.role),
+      });
 
-    const userData = {
-      name: formData.name.trim(),
-      email: formData.email.trim().toLowerCase(),
-      phone: formData.phone.trim(),
-      password: formData.password,
-      confirmPassword: formData.confirmPassword,
-      role: formData.role,
-      createdAt: new Date().toISOString(),
-    };
+      const normalizedUser = normalizeAuthUser(response.data?.user);
+      const token = response.data?.accessToken;
 
-    const users = JSON.parse(localStorage.getItem("users")) || [];
-    const existing = users.find((user) => user.email?.toLowerCase() === userData.email);
-    if (existing) {
-      setError("An account with this email already exists");
+      if (!normalizedUser || !token) {
+        throw new Error("Unexpected registration response from the server");
+      }
+
+      storeAuthSession(normalizedUser, token, false);
+      navigate(routeByRole(normalizedUser.role));
+    } catch (err) {
+      setError(authErrorMessage(err, "Unable to create account"));
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    users.push(userData);
-    localStorage.setItem("users", JSON.stringify(users));
-    localStorage.setItem("user", JSON.stringify(userData));
-
-    navigate(routeByRole(userData.role));
-    setIsLoading(false);
   };
 
   const styles = {

@@ -3,12 +3,16 @@ import { Alert, Badge, Button, Col, Form, Row, Table } from "react-bootstrap";
 import "../styles/FarmerDashboard.css";
 import "../styles/FarmerModules.css";
 import { normalizeRole } from "../utils/auth";
+import {
+  authApi,
+  authErrorMessage,
+  normalizeAuthUser,
+  readStoredToken,
+  readStoredUser,
+  storeAuthSession,
+} from "../utils/authApi";
 
-const getCurrentUser = () =>
-  JSON.parse(localStorage.getItem("currentUser")) ||
-  JSON.parse(sessionStorage.getItem("currentUser")) ||
-  JSON.parse(localStorage.getItem("user")) ||
-  null;
+const getCurrentUser = () => readStoredUser();
 
 const getUsers = () => {
   try {
@@ -19,13 +23,9 @@ const getUsers = () => {
 };
 
 const persistCurrentUser = (user) => {
-  if (localStorage.getItem("currentUser")) {
-    localStorage.setItem("currentUser", JSON.stringify(user));
-  }
-  if (sessionStorage.getItem("currentUser")) {
-    sessionStorage.setItem("currentUser", JSON.stringify(user));
-  }
-  localStorage.setItem("user", JSON.stringify(user));
+  const rememberMe = Boolean(localStorage.getItem("agro_token"));
+  const token = readStoredToken();
+  storeAuthSession(user, token, rememberMe);
 };
 
 const updateUsersCollection = (nextUser, previousEmail) => {
@@ -79,7 +79,6 @@ const Profile = () => {
     farmSize: baseUser?.farmSize || "",
     crops: baseUser?.crops || "",
     address: baseUser?.address || "",
-    password: baseUser?.password || "",
   });
   const [message, setMessage] = useState({ type: "", text: "" });
   const [passwordForm, setPasswordForm] = useState({
@@ -134,53 +133,76 @@ const Profile = () => {
       return;
     }
 
-    const nextUser = {
-      ...baseUser,
-      ...profile,
-      name: profile.name.trim(),
-      email: profile.email.trim().toLowerCase(),
-      phone: profile.phone.trim(),
-      state: profile.state.trim(),
-      district: profile.district.trim(),
-      farmSize: profile.farmSize,
-      crops: profile.crops.trim(),
-      address: profile.address.trim(),
-      role: normalizeRole(profile.role),
-    };
-
-    const otherUsers = getUsers().filter(
-      (item) => item.email?.toLowerCase() !== sourceEmail.toLowerCase()
-    );
-    const duplicate = otherUsers.some(
-      (item) => item.email?.toLowerCase() === nextUser.email.toLowerCase()
-    );
-
-    if (duplicate) {
-      setMessage({ type: "danger", text: "That email is already used by another account." });
+    const token = readStoredToken();
+    if (!token) {
+      setMessage({ type: "danger", text: "Your session expired. Please log in again." });
       return;
     }
 
-    persistCurrentUser(nextUser);
-    updateUsersCollection(nextUser, sourceEmail);
-    setSourceEmail(nextUser.email);
-    setProfile((prev) => ({ ...prev, email: nextUser.email, role: nextUser.role }));
-    setMessage({ type: "success", text: "Profile updated successfully." });
+    const payload = {
+      name: profile.name.trim(),
+      email: profile.email.trim().toLowerCase(),
+      phone: profile.phone.trim(),
+    };
+
+    authApi
+      .put("/users/me", payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      .then((response) => {
+        const normalizedUser = normalizeAuthUser(response.data?.user);
+        const nextUser = {
+          ...baseUser,
+          ...profile,
+          ...normalizedUser,
+          name: payload.name,
+          email: payload.email,
+          phone: payload.phone,
+          role: normalizeRole(normalizedUser?.role || profile.role),
+          state: profile.state.trim(),
+          district: profile.district.trim(),
+          farmSize: profile.farmSize,
+          crops: profile.crops.trim(),
+          address: profile.address.trim(),
+        };
+
+        persistCurrentUser(nextUser);
+        updateUsersCollection(nextUser, sourceEmail);
+        setSourceEmail(nextUser.email);
+        setProfile((prev) => ({
+          ...prev,
+          name: nextUser.name,
+          email: nextUser.email,
+          phone: nextUser.phone,
+          role: nextUser.role,
+        }));
+
+        const newToken = response.data?.accessToken;
+        if (newToken) {
+          const rememberMe = Boolean(localStorage.getItem("agro_token"));
+          storeAuthSession(nextUser, newToken, rememberMe);
+        }
+
+        setMessage({ type: "success", text: "Profile updated successfully." });
+      })
+      .catch((error) => {
+        setMessage({ type: "danger", text: authErrorMessage(error, "Unable to update profile") });
+      });
   };
 
   const handleChangePassword = (event) => {
     event.preventDefault();
 
-    const users = getUsers();
-    const storedUser =
-      users.find((item) => item.email?.toLowerCase() === sourceEmail.toLowerCase()) || baseUser;
-    const storedPassword = storedUser?.password || profile.password;
+    const token = readStoredToken();
+    if (!token) {
+      setMessage({ type: "danger", text: "Your session expired. Please log in again." });
+      return;
+    }
 
     if (!passwordForm.current || !passwordForm.next || !passwordForm.confirm) {
       setMessage({ type: "danger", text: "Fill in all password fields." });
-      return;
-    }
-    if (passwordForm.current !== storedPassword) {
-      setMessage({ type: "danger", text: "Current password is incorrect." });
       return;
     }
     if (passwordForm.next.length < 6) {
@@ -192,12 +214,48 @@ const Profile = () => {
       return;
     }
 
-    const nextUser = { ...storedUser, ...profile, password: passwordForm.next };
-    persistCurrentUser(nextUser);
-    updateUsersCollection(nextUser, sourceEmail);
-    setProfile((prev) => ({ ...prev, password: passwordForm.next }));
-    setPasswordForm({ current: "", next: "", confirm: "" });
-    setMessage({ type: "success", text: "Password changed successfully." });
+    authApi
+      .put(
+        "/users/me/password",
+        {
+          currentPassword: passwordForm.current,
+          newPassword: passwordForm.next,
+          confirmPassword: passwordForm.confirm,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      .then(() => {
+        const currentUser =
+          readStoredUser() ||
+          baseUser || {
+            email: sourceEmail,
+          };
+        const nextUser = {
+          ...currentUser,
+          ...profile,
+          name: profile.name.trim(),
+          email: profile.email.trim().toLowerCase(),
+          phone: profile.phone.trim(),
+          role: normalizeRole(profile.role),
+          state: profile.state.trim(),
+          district: profile.district.trim(),
+          farmSize: profile.farmSize,
+          crops: profile.crops.trim(),
+          address: profile.address.trim(),
+        };
+
+        persistCurrentUser(nextUser);
+        updateUsersCollection(nextUser, sourceEmail);
+        setPasswordForm({ current: "", next: "", confirm: "" });
+        setMessage({ type: "success", text: "Password changed successfully." });
+      })
+      .catch((error) => {
+        setMessage({ type: "danger", text: authErrorMessage(error, "Unable to change password") });
+      });
   };
 
   if (!baseUser) {

@@ -1,6 +1,7 @@
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { normalizeRole } from "../utils/auth";
+import { clearAuthSession } from "../utils/authApi";
 
 const LeafIcon = ({ size = 22, color = "#E9C46A" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -89,10 +90,7 @@ const Sidebar = ({ user }) => {
       : farmerNav;
 
   const handleLogout = () => {
-    localStorage.removeItem("currentUser");
-    sessionStorage.removeItem("currentUser");
-    localStorage.removeItem("agro_token");
-    sessionStorage.removeItem("agro_token");
+    clearAuthSession();
     navigate("/login");
   };
 

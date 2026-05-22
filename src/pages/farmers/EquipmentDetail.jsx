@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
 import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
+import { readStoredUser } from "../../utils/authApi";
 import heroImage from "../../assets/hero.jpg";
 import farmerImage from "../../assets/farmerbg.jpg";
 
@@ -41,10 +42,7 @@ const EquipmentDetail = () => {
   const handleBooking = () => {
     const rentals = getStored(STORAGE_KEYS.rentals, []);
     const invoices = getStored(STORAGE_KEYS.invoices, []);
-    const currentUser =
-      JSON.parse(localStorage.getItem("currentUser")) ||
-      JSON.parse(sessionStorage.getItem("currentUser")) ||
-      JSON.parse(localStorage.getItem("user"));
+    const currentUser = readStoredUser();
 
     const bookingId = `rental-${Date.now()}`;
     const start = new Date(startDate);
@@ -56,7 +54,10 @@ const EquipmentDetail = () => {
       id: bookingId,
       equipmentId: equipment.id,
       equipmentName: equipment.name,
+      farmerId: currentUser?.email || "farmer@example.com",
       farmerName: currentUser?.name || "Farmer",
+      ownerId: equipment.ownerId || "owner@demo.com",
+      ownerName: equipment.ownerName || "Owner",
       startDate,
       endDate,
       status: "REQUESTED",
@@ -67,11 +68,17 @@ const EquipmentDetail = () => {
     invoices.push({
       id: `inv-${Date.now()}`,
       rentalId: bookingId,
+      equipmentId: equipment.id,
+      equipmentName: equipment.name,
       amount,
       method: paymentMethod,
       status: "PENDING",
       createdAt: new Date().toISOString(),
-      equipmentName: equipment.name,
+      farmerId: currentUser?.email || "farmer@example.com",
+      farmerName: currentUser?.name || "Farmer",
+      ownerId: equipment.ownerId || "owner@demo.com",
+      ownerName: equipment.ownerName || "Owner",
+      receiptNumber: `rcpt-${bookingId}`,
     });
 
     setStored(STORAGE_KEYS.rentals, rentals);

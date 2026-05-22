@@ -3,16 +3,14 @@ import { Link } from "react-router-dom";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
 import { getStored, STORAGE_KEYS } from "../../utils/storage";
+import { readStoredUser } from "../../utils/authApi";
 
 const OwnerEarnings = () => {
   const invoices = getStored(STORAGE_KEYS.invoices, []);
   const rentals = getStored(STORAGE_KEYS.rentals, []);
   const equipments = getStored(STORAGE_KEYS.equipments, []);
 
-  const currentUser =
-    JSON.parse(localStorage.getItem("currentUser")) ||
-    JSON.parse(sessionStorage.getItem("currentUser")) ||
-    JSON.parse(localStorage.getItem("user"));
+  const currentUser = readStoredUser();
   const ownerKey = currentUser?.email || "owner@demo.com";
 
   const [page, setPage] = useState(1);

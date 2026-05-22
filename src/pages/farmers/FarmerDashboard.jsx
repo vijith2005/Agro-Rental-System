@@ -4,15 +4,13 @@ import "../../styles/FarmerDashboard.css";
 import heroImage from "../../assets/farmerbg.jpg";
 import equipmentOne from "../../assets/hero.jpg";
 import equipmentTwo from "../../assets/farmerbg.jpg";
+import { readStoredUser } from "../../utils/authApi";
 
 const FarmDashboard = () => {
   const [displayName, setDisplayName] = useState("Farmer");
 
   useEffect(() => {
-    const currentUser =
-      JSON.parse(localStorage.getItem("currentUser")) ||
-      JSON.parse(sessionStorage.getItem("currentUser")) ||
-      JSON.parse(localStorage.getItem("user"));
+    const currentUser = readStoredUser();
 
     if (currentUser?.name) {
       setDisplayName(currentUser.name);

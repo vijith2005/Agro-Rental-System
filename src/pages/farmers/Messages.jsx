@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
 import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
+import { readStoredUser } from "../../utils/authApi";
 
 const Messages = () => {
   const [contacts, setContacts] = useState([]);
@@ -10,10 +11,7 @@ const Messages = () => {
   const [input, setInput] = useState("");
   const bottomRef = useRef(null);
 
-  const currentUser =
-    JSON.parse(localStorage.getItem("currentUser")) ||
-    JSON.parse(sessionStorage.getItem("currentUser")) ||
-    JSON.parse(localStorage.getItem("user"));
+  const currentUser = readStoredUser();
   const farmerId = currentUser?.email || "farmer@demo.com";
   const farmerName = currentUser?.name || currentUser?.email?.split("@")[0] || "Farmer";
 

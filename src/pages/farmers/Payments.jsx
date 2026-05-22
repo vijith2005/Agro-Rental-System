@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
 import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
+import { authErrorMessage, readStoredToken, readStoredUser } from "../../utils/authApi";
+import { paymentApi, paymentAuthHeaders } from "../../utils/paymentApi";
 
 const methodOptions = ["UPI", "Card", "Net Banking", "Cash", "Razorpay"];
 
@@ -16,6 +18,7 @@ const Payments = () => {
   const [netBank, setNetBank] = useState("SBI");
   const [loading, setLoading] = useState(false);
   const [rzpLoading, setRzpLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
 
   useEffect(() => {
     setInvoices(getStored(STORAGE_KEYS.invoices, []));
@@ -38,12 +41,14 @@ const Payments = () => {
   const openPayModal = (invoice) => {
     setPayModal({ open: true, invoice });
     setPaymentMethod("UPI");
+    setPaymentError("");
   };
 
   const closePayModal = () => {
     setPayModal({ open: false, invoice: null });
     setUpiId("");
     setCardDetails({ number: "", expiry: "", cvv: "" });
+    setPaymentError("");
   };
 
   const loadRazorpay = () =>
@@ -75,31 +80,105 @@ const Payments = () => {
   const handleRazorpay = async () => {
     if (!payModal.invoice) return;
     try {
+      const token = readStoredToken();
+      const currentUser = readStoredUser();
+      if (!token || !currentUser) {
+        setPaymentError("Your session expired. Please log in again.");
+        return;
+      }
+
       setRzpLoading(true);
       await loadRazorpay();
-      const amountPaise = Math.max(1, Math.round((Number(payModal.invoice.amount) || 0) * 100));
-      const rzpKey = import.meta.env.VITE_RAZORPAY_KEY || "rzp_test_xxxxxxxx";
+      const amountRupees = Math.max(1, Math.round(Number(payModal.invoice.amount) || 0));
+      const receipt = payModal.invoice.receiptNumber || payModal.invoice.id || `rcpt-${Date.now()}`;
+      const equipmentList = getStored(STORAGE_KEYS.equipments, []);
+      const rental = rentals.find((item) => item.id === payModal.invoice.rentalId);
+      const equipment =
+        equipmentList.find((item) => item.id === rental?.equipmentId) ||
+        equipmentList.find((item) => item.name === payModal.invoice.equipmentName);
+      const orderResponse = await paymentApi.post(
+        "/razorpay/orders",
+        {
+          amount: amountRupees,
+          receipt,
+          description: payModal.invoice.equipmentName || "Equipment booking",
+        },
+        {
+          headers: paymentAuthHeaders(),
+        }
+      );
+
+      const order = orderResponse.data;
+      const rzpKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
+      if (!rzpKey) {
+        throw new Error("Missing Razorpay key id. Add VITE_RAZORPAY_KEY_ID to .env.local");
+      }
+
       const options = {
         key: rzpKey,
-        amount: amountPaise,
+        amount: order.amount,
         currency: "INR",
         name: "AgroRent",
         description: payModal.invoice.equipmentName || "Equipment booking",
-        handler: () => {
-          // Normally verify signature on backend. Here we trust client for demo.
-          markInvoicePaid(payModal.invoice.id, "Razorpay");
-          setRzpLoading(false);
-          closePayModal();
+        order_id: order.id,
+        handler: async (response) => {
+          try {
+            await paymentApi.post(
+              "",
+              {
+                rentalId: payModal.invoice.rentalId || "",
+                equipmentId: payModal.invoice.equipmentId || equipment?.id || payModal.invoice.rentalId || "",
+                equipmentName: payModal.invoice.equipmentName || equipment?.name || "Equipment",
+                farmerId: currentUser.email || "farmer@example.com",
+                farmerName: currentUser.name || "Farmer",
+                ownerId: payModal.invoice.ownerId || equipment?.ownerId || "owner@demo.com",
+                ownerName: payModal.invoice.ownerName || equipment?.ownerName || "Owner",
+                amount: amountRupees,
+                paymentMethod: "Razorpay",
+                gateway: "Razorpay",
+                transactionId: response.razorpay_payment_id,
+                receiptNumber: receipt,
+                note: `Razorpay order ${order.id}`,
+                status: "PAID",
+              },
+              {
+                headers: paymentAuthHeaders(),
+              }
+            );
+            markInvoicePaid(payModal.invoice.id, "Razorpay");
+            closePayModal();
+          } catch (saveError) {
+            setPaymentError(
+              authErrorMessage(saveError, "Payment completed, but saving it on the server failed")
+            );
+            markInvoicePaid(payModal.invoice.id, "Razorpay");
+          } finally {
+            setRzpLoading(false);
+          }
         },
         prefill: {
-          email: JSON.parse(localStorage.getItem("currentUser") || "{}")?.email || "farmer@example.com",
+          email: currentUser.email || "farmer@example.com",
+          name: currentUser.name || "Farmer",
         },
         theme: { color: "#1B4332" },
+        modal: {
+          ondismiss: () => {
+            setRzpLoading(false);
+          },
+        },
       };
       const rzp = new window.Razorpay(options);
+      rzp.on("payment.failed", (response) => {
+        const reason =
+          response?.error?.description ||
+          response?.error?.reason ||
+          "Payment failed";
+        setPaymentError(reason);
+        setRzpLoading(false);
+      });
       rzp.open();
     } catch (err) {
-      console.error(err);
+      setPaymentError(authErrorMessage(err, "Unable to start Razorpay checkout"));
       setRzpLoading(false);
     }
   };
@@ -307,6 +386,7 @@ const Payments = () => {
                 <button className="btn-close" onClick={closePayModal}></button>
               </div>
               <div className="modal-body">
+                {paymentError ? <div className="alert alert-danger py-2">{paymentError}</div> : null}
                 <div className="mb-3">
                   <div className="fw-semibold">{payModal.invoice?.equipmentName || "Equipment"}</div>
                   <div className="text-muted small">

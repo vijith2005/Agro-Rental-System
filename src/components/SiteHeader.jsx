@@ -1,13 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getStored, STORAGE_KEYS } from "../utils/storage";
+import { readStoredUser } from "../utils/authApi";
 
 const SiteHeader = () => {
   const location = useLocation();
-  const currentUser =
-    JSON.parse(localStorage.getItem("currentUser")) ||
-    JSON.parse(sessionStorage.getItem("currentUser")) ||
-    JSON.parse(localStorage.getItem("user"));
+  const currentUser = readStoredUser();
 
   const role = currentUser?.role || "guest";
   const displayName = currentUser?.name || currentUser?.email?.split("@")[0] || "Guest";

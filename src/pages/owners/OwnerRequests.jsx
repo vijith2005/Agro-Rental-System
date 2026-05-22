@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
 import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
+import { readStoredUser } from "../../utils/authApi";
 
 const OwnerRequests = () => {
   const [page, setPage] = useState(1);
@@ -11,10 +12,7 @@ const OwnerRequests = () => {
   const [invoices, setInvoices] = useState(getStored(STORAGE_KEYS.invoices, []));
   const equipments = getStored(STORAGE_KEYS.equipments, []);
 
-  const currentUser =
-    JSON.parse(localStorage.getItem("currentUser")) ||
-    JSON.parse(sessionStorage.getItem("currentUser")) ||
-    JSON.parse(localStorage.getItem("user"));
+  const currentUser = readStoredUser();
   const ownerKey = currentUser?.email || "owner@demo.com";
 
   const requestList = rentals.filter((rental) => {

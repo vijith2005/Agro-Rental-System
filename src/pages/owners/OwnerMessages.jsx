@@ -2,6 +2,7 @@
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
 import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
+import { readStoredUser } from "../../utils/authApi";
 
 const OwnerMessages = () => {
   const [contacts, setContacts] = useState([]);
@@ -10,10 +11,7 @@ const OwnerMessages = () => {
   const [input, setInput] = useState("");
   const bottomRef = useRef(null);
 
-  const currentUser =
-    JSON.parse(localStorage.getItem("currentUser")) ||
-    JSON.parse(sessionStorage.getItem("currentUser")) ||
-    JSON.parse(localStorage.getItem("user"));
+  const currentUser = readStoredUser();
   const ownerId = currentUser?.email || "owner@demo.com";
   const ownerName = currentUser?.name || currentUser?.email?.split("@")[0] || "Owner";
 
