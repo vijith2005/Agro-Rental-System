@@ -24,7 +24,7 @@ const EquipmentDetail = () => {
   const today = new Date().toISOString().split("T")[0];
   const [startDate, setStartDate] = useState(today);
   const [endDate, setEndDate] = useState(today);
-  const [paymentMethod, setPaymentMethod] = useState("UPI");
+  const [paymentMethod] = useState("Razorpay");
 
   useEffect(() => {
     let active = true;
@@ -176,13 +176,8 @@ const EquipmentDetail = () => {
               <label>End date</label>
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </div>
-            <div className="form-field">
-              <label>Payment method</label>
-              <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
-                <option value="UPI">UPI</option>
-                <option value="CARD">Card</option>
-                <option value="CASH">Cash</option>
-              </select>
+            <div className="alert alert-info py-2 small mb-3">
+              Payments now use Razorpay test mode for a cleaner checkout flow.
             </div>
 
             <div className="d-grid gap-2">

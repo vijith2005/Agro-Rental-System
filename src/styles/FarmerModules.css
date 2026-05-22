@@ -722,6 +722,99 @@
   border-color: transparent;
 }
 
+.activity-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  margin-top: 22px;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 12px 18px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #d5d5dd, #79d785);
+  box-shadow: 0 18px 28px rgba(35, 35, 98, 0.18);
+}
+
+.activity-pagination-arrow {
+  width: 52px;
+  height: 52px;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  font-size: 48px;
+  line-height: 1;
+  font-weight: 300;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+  text-shadow: 0 0 0 transparent;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.activity-pagination-arrow:hover:not(:disabled) {
+  transform: scale(1.04);
+}
+
+.activity-pagination-arrow:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.activity-pagination-dots {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.activity-pagination-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: none;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.activity-pagination-dot:hover {
+  transform: scale(1.08);
+}
+
+.activity-pagination-dot.active {
+  width: 18px;
+  height: 18px;
+  background: #f5b14c;
+  box-shadow: 0 0 0 3px rgba(245, 177, 76, 0.2);
+}
+
+.profile-activity-panel {
+  font-family: var(--owner-heading-font);
+}
+
+.profile-activity-header h5,
+.profile-activity-header p,
+.profile-activity-table {
+  font-family: var(--owner-heading-font);
+}
+
+.profile-activity-table {
+  font-size: 12px;
+}
+
+.profile-activity-table th,
+.profile-activity-table td {
+  font-size: 12px;
+}
+
+.profile-activity-table th {
+  font-weight: 700;
+}
+
 /* Owner listings typography + color tweaks to mirror form styling */
 .owner-listings-page .page-title {
   font-family: var(--display-font);

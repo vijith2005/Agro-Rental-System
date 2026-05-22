@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Col, Form, Row, Spinner, Table } from "react-bootstrap";
+import { Alert, Badge, Button, Col, Form, Modal, Row, Spinner, Table } from "react-bootstrap";
 import { changeMyPassword, getMyAuthUser, updateMyAuthUser } from "../api/authApi";
 import { getApiErrorMessage } from "../api/http";
 import {
@@ -58,6 +58,8 @@ const roleAccent = (role) => {
   return "success";
 };
 
+const ACTIVITY_PAGE_SIZE = 3;
+
 const Profile = () => {
   const cachedUser = useMemo(() => getCurrentUser(), []);
   const [profile, setProfile] = useState(() => buildProfileState(cachedUser));
@@ -68,18 +70,27 @@ const Profile = () => {
     confirm: "",
   });
   const [activity, setActivity] = useState([]);
+  const [activityPage, setActivityPage] = useState(1);
   const [isBootstrapping, setIsBootstrapping] = useState(Boolean(cachedUser));
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   useEffect(() => {
     try {
       const history = JSON.parse(localStorage.getItem("authHistory")) || [];
-      setActivity(history.slice().reverse().slice(0, 8));
+      setActivity(history.slice().reverse());
     } catch {
       setActivity([]);
     }
   }, []);
+
+  useEffect(() => {
+    setActivityPage((currentPage) => {
+      const totalPages = Math.max(1, Math.ceil(activity.length / ACTIVITY_PAGE_SIZE));
+      return Math.min(currentPage, totalPages);
+    });
+  }, [activity.length]);
 
   useEffect(() => {
     let isActive = true;
@@ -139,6 +150,28 @@ const Profile = () => {
   }, [profile.email, profile.name]);
 
   const isFarmer = profile.role === "farmer";
+  const activityPageCount = Math.max(1, Math.ceil(activity.length / ACTIVITY_PAGE_SIZE));
+  const activityPageDots = useMemo(() => {
+    if (activityPageCount <= 3) {
+      return Array.from({ length: activityPageCount }, (_, index) => index + 1);
+    }
+
+    if (activityPage === 1) {
+      return [1, 2, 3];
+    }
+
+    if (activityPage === activityPageCount) {
+      return [activityPageCount - 2, activityPageCount - 1, activityPageCount];
+    }
+
+    return [activityPage - 1, activityPage, activityPage + 1];
+  }, [activityPage, activityPageCount]);
+  const pagedActivity = useMemo(() => {
+    const start = (activityPage - 1) * ACTIVITY_PAGE_SIZE;
+    return activity.slice(start, start + ACTIVITY_PAGE_SIZE);
+  }, [activity, activityPage]);
+  const activityStart = activity.length === 0 ? 0 : (activityPage - 1) * ACTIVITY_PAGE_SIZE + 1;
+  const activityEnd = Math.min(activityPage * ACTIVITY_PAGE_SIZE, activity.length);
 
   const handleProfileChange = (event) => {
     const { name, value } = event.target;
@@ -247,6 +280,7 @@ const Profile = () => {
       });
 
       setPasswordForm({ current: "", next: "", confirm: "" });
+      setShowPasswordModal(false);
       setMessage({ variant: "success", text: "Password changed successfully." });
       pushAuthHistory("PASSWORD_CHANGED");
     } catch (error) {
@@ -257,6 +291,16 @@ const Profile = () => {
     } finally {
       setIsSavingPassword(false);
     }
+  };
+
+  const openPasswordModal = () => {
+    setMessage({ variant: "", text: "" });
+    setShowPasswordModal(true);
+  };
+
+  const closePasswordModal = () => {
+    setShowPasswordModal(false);
+    setPasswordForm({ current: "", next: "", confirm: "" });
   };
 
   if (!cachedUser) {
@@ -431,54 +475,28 @@ const Profile = () => {
 
         <Col xl={4}>
           <div className="agr-panel mb-4">
-            <h5 className="mb-4">Security</h5>
-            <Form onSubmit={handleChangePassword}>
-              <Form.Group className="mb-3">
-                <Form.Label>Current Password</Form.Label>
-                <Form.Control
-                  type="password"
-                  name="current"
-                  value={passwordForm.current}
-                  onChange={handlePasswordChange}
-                  disabled={isSavingPassword}
-                />
-              </Form.Group>
-              <Form.Group className="mb-3">
-                <Form.Label>New Password</Form.Label>
-                <Form.Control
-                  type="password"
-                  name="next"
-                  value={passwordForm.next}
-                  onChange={handlePasswordChange}
-                  disabled={isSavingPassword}
-                />
-              </Form.Group>
-              <Form.Group className="mb-3">
-                <Form.Label>Confirm Password</Form.Label>
-                <Form.Control
-                  type="password"
-                  name="confirm"
-                  value={passwordForm.confirm}
-                  onChange={handlePasswordChange}
-                  disabled={isSavingPassword}
-                />
-              </Form.Group>
-              <Button type="submit" variant="outline-dark" disabled={isSavingPassword}>
-                {isSavingPassword ? (
-                  <>
-                    <Spinner animation="border" size="sm" className="me-2" />
-                    Updating...
-                  </>
-                ) : (
-                  "Update Password"
-                )}
+            <div className="d-flex align-items-start justify-content-between gap-3">
+              <div>
+                <h5 className="mb-2">Security</h5>
+                <p className="text-muted mb-0">Keep your account protected with a fresh password.</p>
+              </div>
+              <Button variant="outline-dark" onClick={openPasswordModal}>
+                Change Password
               </Button>
-            </Form>
+            </div>
           </div>
 
-          <div className="agr-panel">
-            <h5 className="mb-4">Activity Log</h5>
-            <Table responsive hover className="mb-0">
+          <div className="agr-panel profile-activity-panel">
+            <div className="d-flex align-items-center justify-content-between gap-3 mb-4">
+              <div className="profile-activity-header">
+                <h5 className="mb-1">Activity Log</h5>
+                <p className="text-muted mb-0">Recent account activity from this browser session.</p>
+              </div>
+              <Badge bg="secondary" className="px-3 py-2">
+                {activity.length} entries
+              </Badge>
+            </div>
+            <Table responsive hover className="mb-0 profile-activity-table">
               <thead>
                 <tr>
                   <th>Type</th>
@@ -487,8 +505,8 @@ const Profile = () => {
                 </tr>
               </thead>
               <tbody>
-                {activity.length > 0 ? (
-                  activity.map((item, index) => (
+                {pagedActivity.length > 0 ? (
+                  pagedActivity.map((item, index) => (
                     <tr key={`${item.at || item.time || index}-${index}`}>
                       <td>{activityLabel(item)}</td>
                       <td>{activityTime(item)}</td>
@@ -506,9 +524,106 @@ const Profile = () => {
                 )}
               </tbody>
             </Table>
+            {activity.length > 0 ? (
+              <div className="activity-pagination mt-4">
+                <button
+                  type="button"
+                  className="activity-pagination-arrow"
+                  onClick={() => setActivityPage((page) => Math.max(1, page - 1))}
+                  disabled={activityPage === 1}
+                  aria-label="Previous page"
+                >
+                  <span aria-hidden="true">‹</span>
+                </button>
+                <div className="activity-pagination-dots" aria-label="Activity pages">
+                  {activityPageDots.map((page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      className={`activity-pagination-dot ${page === activityPage ? "active" : ""}`}
+                      onClick={() => setActivityPage(page)}
+                      aria-label={`Go to page ${page}`}
+                      aria-current={page === activityPage ? "page" : undefined}
+                    >
+                      <span className="visually-hidden">Page {page}</span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="activity-pagination-arrow"
+                  onClick={() => setActivityPage((page) => Math.min(activityPageCount, page + 1))}
+                  disabled={activityPage === activityPageCount}
+                  aria-label="Next page"
+                >
+                  <span aria-hidden="true">›</span>
+                </button>
+              </div>
+            ) : null}
+            {activity.length > 0 ? (
+              <div className="text-muted small mt-3">
+                Showing {activityStart} to {activityEnd} of {activity.length} entries
+              </div>
+            ) : null}
           </div>
         </Col>
       </Row>
+
+      <Modal show={showPasswordModal} onHide={closePasswordModal} centered>
+        <Form onSubmit={handleChangePassword}>
+          <Modal.Header closeButton>
+            <Modal.Title>Change Password</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            {message.text ? <Alert variant={message.variant || "info"}>{message.text}</Alert> : null}
+            <Form.Group className="mb-3">
+              <Form.Label>Current Password</Form.Label>
+              <Form.Control
+                type="password"
+                name="current"
+                value={passwordForm.current}
+                onChange={handlePasswordChange}
+                disabled={isSavingPassword}
+              />
+            </Form.Group>
+            <Form.Group className="mb-3">
+              <Form.Label>New Password</Form.Label>
+              <Form.Control
+                type="password"
+                name="next"
+                value={passwordForm.next}
+                onChange={handlePasswordChange}
+                disabled={isSavingPassword}
+              />
+            </Form.Group>
+            <Form.Group className="mb-0">
+              <Form.Label>Confirm Password</Form.Label>
+              <Form.Control
+                type="password"
+                name="confirm"
+                value={passwordForm.confirm}
+                onChange={handlePasswordChange}
+                disabled={isSavingPassword}
+              />
+            </Form.Group>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="outline-secondary" onClick={closePasswordModal} disabled={isSavingPassword}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="dark" disabled={isSavingPassword}>
+              {isSavingPassword ? (
+                <>
+                  <Spinner animation="border" size="sm" className="me-2" />
+                  Updating...
+                </>
+              ) : (
+                "Update Password"
+              )}
+            </Button>
+          </Modal.Footer>
+        </Form>
+      </Modal>
     </div>
   );
 };
