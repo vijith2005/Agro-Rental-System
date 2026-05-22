@@ -1,29 +1,26 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
-import { createPayment, listPaymentsByFarmer } from "../../api/paymentApi";
+import { createPayment, createRazorpayOrder, listPaymentsByFarmer } from "../../api/paymentApi";
 import { listRentalsByFarmer, updateRentalStatus } from "../../api/rentalApi";
+import { getApiErrorMessage } from "../../api/http";
 import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
 import { getCurrentUser } from "../../utils/session";
 import { RENTAL_UPDATED_EVENT, notifyRentalUpdated } from "../../utils/rentalEvents";
 import { PAYMENT_UPDATED_EVENT, notifyPaymentUpdated } from "../../utils/paymentEvents";
-
-const methodOptions = ["UPI", "Card", "Net Banking", "Cash", "Razorpay"];
+import { openRazorpayCheckout } from "../../utils/razorpay";
 
 const Payments = () => {
   const [rentals, setRentals] = useState([]);
   const [payments, setPayments] = useState([]);
   const [showHistory, setShowHistory] = useState(true);
   const [payModal, setPayModal] = useState({ open: false, rental: null });
-  const [paymentMethod, setPaymentMethod] = useState("UPI");
-  const [upiId, setUpiId] = useState("");
-  const [cardDetails, setCardDetails] = useState({ number: "", expiry: "", cvv: "" });
-  const [netBank, setNetBank] = useState("SBI");
   const [loading, setLoading] = useState(false);
   const [warnings, setWarnings] = useState([]);
 
   const farmerKey = getCurrentUser()?.email || "farmer@demo.com";
   const farmerName = getCurrentUser()?.name || "Farmer";
+  const razorpayKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
 
   const appendWarning = (warning) => {
     setWarnings((current) => (current.includes(warning) ? current : [...current, warning]));
@@ -121,16 +118,13 @@ const Payments = () => {
 
   const openPayModal = (rental) => {
     setPayModal({ open: true, rental });
-    setPaymentMethod("UPI");
   };
 
   const closePayModal = () => {
     setPayModal({ open: false, rental: null });
-    setUpiId("");
-    setCardDetails({ number: "", expiry: "", cvv: "" });
   };
 
-  const buildPaymentPayload = (rental, methodLabel) => ({
+  const buildPaymentPayload = (rental, methodLabel, gatewayMeta = {}) => ({
     rentalId: rental.id,
     equipmentId: rental.equipmentId,
     equipmentName: rental.equipmentName,
@@ -140,12 +134,14 @@ const Payments = () => {
     ownerName: rental.ownerName || "",
     amount: Number(rental.totalAmount || 0),
     paymentMethod: methodLabel,
-    gateway: methodLabel === "Razorpay" ? "Razorpay" : "Manual",
-    note: `Paid via ${methodLabel}`,
+    gateway: gatewayMeta.gateway || (methodLabel === "Razorpay" ? "Razorpay" : "Manual"),
+    transactionId: gatewayMeta.transactionId || `txn-${Date.now()}`,
+    receiptNumber: gatewayMeta.receiptNumber || `rcpt-${Date.now()}`,
+    note: gatewayMeta.note || `Paid via ${methodLabel}`,
     status: "PAID",
   });
 
-  const createLocalPayment = (rental, methodLabel) => {
+  const createLocalPayment = (rental, methodLabel, gatewayMeta = {}) => {
     const now = new Date().toISOString();
     return {
       id: `pay-${Date.now()}`,
@@ -159,10 +155,10 @@ const Payments = () => {
       amount: Number(rental.totalAmount || 0),
       currency: "INR",
       paymentMethod: methodLabel,
-      gateway: methodLabel === "Razorpay" ? "Razorpay" : "Manual",
-      transactionId: `txn-${Date.now()}`,
-      receiptNumber: `rcpt-${Date.now()}`,
-      note: `Paid via ${methodLabel}`,
+      gateway: gatewayMeta.gateway || (methodLabel === "Razorpay" ? "Razorpay" : "Manual"),
+      transactionId: gatewayMeta.transactionId || `txn-${Date.now()}`,
+      receiptNumber: gatewayMeta.receiptNumber || `rcpt-${Date.now()}`,
+      note: gatewayMeta.note || `Paid via ${methodLabel}`,
       status: "PAID",
       initiatedAt: now,
       paidAt: now,
@@ -171,12 +167,13 @@ const Payments = () => {
     };
   };
 
-  const markAsPaid = async (rental, methodLabel) => {
+  const markAsPaid = async (rental, methodLabel, gatewayMeta = {}) => {
+    const payload = buildPaymentPayload(rental, methodLabel, gatewayMeta);
     let paymentRecord;
     try {
-      paymentRecord = await createPayment(buildPaymentPayload(rental, methodLabel));
+      paymentRecord = await createPayment(payload);
     } catch {
-      paymentRecord = createLocalPayment(rental, methodLabel);
+      paymentRecord = createLocalPayment(rental, methodLabel, gatewayMeta);
     }
 
     try {
@@ -204,77 +201,53 @@ const Payments = () => {
   const confirmPayment = async () => {
     if (!payModal.rental) return;
     setLoading(true);
-    await new Promise((res) => setTimeout(res, 300));
-    await markAsPaid(payModal.rental, paymentMethod);
-    setLoading(false);
-    closePayModal();
-  };
+    const rental = payModal.rental;
+    const currentUser = getCurrentUser();
 
-  const renderMethodFields = () => {
-    if (paymentMethod === "UPI") {
-      return (
-        <div className="mb-3">
-          <label className="form-label">UPI ID</label>
-          <input
-            className="form-control"
-            placeholder="name@bank"
-            value={upiId}
-            onChange={(e) => setUpiId(e.target.value)}
-          />
-        </div>
-      );
+    try {
+      const description = `${rental.equipmentName || "Equipment"} rental payment`;
+      let order = null;
+
+      try {
+        order = await createRazorpayOrder({
+          amount: Number(rental.totalAmount || 0),
+          receipt: `rcpt-${rental.id}-${Date.now()}`,
+          description,
+        });
+      } catch (orderError) {
+        console.warn("Razorpay order creation failed. Falling back to direct checkout.", orderError);
+      }
+
+      const response = await openRazorpayCheckout({
+        key: razorpayKeyId,
+        amount: Number(rental.totalAmount || 0),
+        orderId: order?.id,
+        name: "AgroConnect",
+        description,
+        prefill: {
+          name: currentUser?.name || farmerName,
+          email: currentUser?.email || farmerKey,
+          contact: currentUser?.phone || "",
+        },
+        notes: {
+          rentalId: rental.id || "",
+          equipmentId: rental.equipmentId || "",
+          equipmentName: rental.equipmentName || "",
+        },
+      });
+
+      await markAsPaid(rental, "Razorpay", {
+        gateway: "Razorpay",
+        transactionId: response.razorpay_payment_id,
+        receiptNumber: response.razorpay_order_id || order?.id || `rcpt-${Date.now()}`,
+        note: "Paid via Razorpay test mode",
+      });
+      closePayModal();
+    } catch (error) {
+      appendWarning(getApiErrorMessage(error, "Unable to complete the Razorpay checkout."));
+    } finally {
+      setLoading(false);
     }
-    if (paymentMethod === "Card") {
-      return (
-        <>
-          <div className="mb-3">
-            <label className="form-label">Card Number</label>
-            <input
-              className="form-control"
-              placeholder="xxxx xxxx xxxx xxxx"
-              value={cardDetails.number}
-              onChange={(e) => setCardDetails((prev) => ({ ...prev, number: e.target.value }))}
-            />
-          </div>
-          <div className="row g-2">
-            <div className="col">
-              <label className="form-label">Expiry</label>
-              <input
-                className="form-control"
-                placeholder="MM/YY"
-                value={cardDetails.expiry}
-                onChange={(e) => setCardDetails((prev) => ({ ...prev, expiry: e.target.value }))}
-              />
-            </div>
-            <div className="col">
-              <label className="form-label">CVV</label>
-              <input
-                className="form-control"
-                type="password"
-                placeholder="123"
-                value={cardDetails.cvv}
-                onChange={(e) => setCardDetails((prev) => ({ ...prev, cvv: e.target.value }))}
-              />
-            </div>
-          </div>
-        </>
-      );
-    }
-    if (paymentMethod === "Net Banking") {
-      return (
-        <div className="mb-3">
-          <label className="form-label">Select Bank</label>
-          <select className="form-select" value={netBank} onChange={(e) => setNetBank(e.target.value)}>
-            {["SBI", "HDFC", "ICICI", "Axis", "Kotak"].map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-          </select>
-        </div>
-      );
-    }
-    return null;
   };
 
   return (
@@ -308,12 +281,12 @@ const Payments = () => {
               <div className="fs-4 fw-bold text-warning">Rs {summary.totalPending}</div>
             </div>
           </div>
-          <div className="col-md-4">
+          {/* <div className="col-md-4">
             <div className="card shadow-sm p-3">
               <div className="text-muted small">Total Refunded</div>
               <div className="fs-4 fw-bold text-secondary">Rs {summary.totalRefunded}</div>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
 
@@ -421,7 +394,7 @@ const Payments = () => {
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header">
-                <h5 className="modal-title">Complete Payment</h5>
+                <h5 className="modal-title">Razorpay Test Checkout</h5>
                 <button className="btn-close" onClick={closePayModal}></button>
               </div>
               <div className="modal-body">
@@ -431,37 +404,16 @@ const Payments = () => {
                     Amount: <span className="fw-bold text-primary">Rs {payModal.rental?.totalAmount || 0}</span>
                   </div>
                 </div>
-                <div className="mb-3">
-                  <label className="form-label">Payment Method</label>
-                  <div className="btn-group w-100">
-                    {methodOptions.map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        className={`btn btn-sm ${paymentMethod === m ? "btn-primary" : "btn-outline-primary"}`}
-                        onClick={() => setPaymentMethod(m)}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {renderMethodFields()}
-                {paymentMethod === "Cash" && (
-                  <p className="text-muted small mb-0">Pay at the time of pickup; status will update after confirmation.</p>
-                )}
-                {paymentMethod === "Razorpay" && (
-                  <p className="text-muted small mb-0">
-                    Secure checkout via Razorpay is simulated through the payment service record.
-                  </p>
-                )}
+                <p className="text-muted small mb-0">
+                  This opens Razorpay test mode and records the payment after the checkout succeeds.
+                </p>
               </div>
               <div className="modal-footer">
                 <button className="btn btn-outline-secondary" onClick={closePayModal} disabled={loading}>
                   Close
                 </button>
                 <button className="btn btn-warning" onClick={confirmPayment} disabled={loading}>
-                  {loading ? "Processing..." : `Confirm Payment Rs ${payModal.rental?.totalAmount || 0}`}
+                  {loading ? "Opening Razorpay..." : `Pay with Razorpay Rs ${payModal.rental?.totalAmount || 0}`}
                 </button>
               </div>
             </div>

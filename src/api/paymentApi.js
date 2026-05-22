@@ -5,6 +5,11 @@ export const createPayment = async (payload) => {
   return data;
 };
 
+export const createRazorpayOrder = async (payload) => {
+  const { data } = await paymentClient.post("/payments/razorpay/orders", payload);
+  return data;
+};
+
 export const updatePaymentStatus = async (id, payload) => {
   const { data } = await paymentClient.put(`/payments/${id}/status`, payload);
   return data;

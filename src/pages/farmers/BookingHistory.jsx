@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
-import { createPayment } from "../../api/paymentApi";
+import { createPayment, createRazorpayOrder } from "../../api/paymentApi";
 import { listRentalsByFarmer, updateRentalStatus } from "../../api/rentalApi";
+import { getApiErrorMessage } from "../../api/http";
 import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
 import { getCurrentUser } from "../../utils/session";
 import { RENTAL_UPDATED_EVENT, notifyRentalUpdated } from "../../utils/rentalEvents";
 import { notifyPaymentUpdated } from "../../utils/paymentEvents";
+import { openRazorpayCheckout } from "../../utils/razorpay";
 
 const TABS = ["All", "Pending", "Confirmed", "Cancelled", "Completed"];
 
@@ -36,7 +38,10 @@ const BookingHistory = () => {
   const [bookings, setBookings] = useState([]);
   const [page, setPage] = useState(1);
   const [cancelModal, setCancelModal] = useState({ open: false, booking: null });
+  const [paymentWarning, setPaymentWarning] = useState("");
+  const [processingId, setProcessingId] = useState("");
   const pageSize = 6;
+  const razorpayKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
 
   useEffect(() => {
     let active = true;
@@ -128,59 +133,101 @@ const BookingHistory = () => {
     const rental = bookings.find((item) => item.id === id);
     if (!rental) return;
 
-    const paymentPayload = {
-      rentalId: rental.id,
-      equipmentId: rental.equipmentId,
-      equipmentName: rental.equipmentName,
-      farmerId: currentUser?.email || "farmer@demo.com",
-      farmerName: currentUser?.name || rental.farmerName || "Farmer",
-      ownerId: rental.ownerId || "",
-      ownerName: rental.ownerName || "",
-      amount: Number(rental.totalAmount || 0),
-      paymentMethod: rental.paymentMethod || "UPI",
-      gateway: rental.paymentMethod === "Razorpay" ? "Razorpay" : "Manual",
-      note: "Paid from booking history",
-      status: "PAID",
-    };
+    setProcessingId(id);
+    setPaymentWarning("");
 
     try {
-      const paymentRecord = await createPayment(paymentPayload);
-      const cachedPayments = getStored(STORAGE_KEYS.payments, []);
-      setStored(STORAGE_KEYS.payments, [
-        paymentRecord,
-        ...cachedPayments.filter((payment) => payment.rentalId !== id),
-      ]);
-    } catch {
-      const now = new Date().toISOString();
-      const cachedPayments = getStored(STORAGE_KEYS.payments, []);
-      setStored(STORAGE_KEYS.payments, [
-        {
-          id: `pay-${Date.now()}`,
-          ...paymentPayload,
-          currency: "INR",
-          transactionId: `txn-${Date.now()}`,
-          receiptNumber: `rcpt-${Date.now()}`,
-          paidAt: now,
-          initiatedAt: now,
-          createdAt: now,
-          updatedAt: now,
+      const description = `${rental.equipmentName || "Equipment"} rental payment`;
+      let order = null;
+
+      try {
+        order = await createRazorpayOrder({
+          amount: Number(rental.totalAmount || 0),
+          receipt: `rcpt-${rental.id}-${Date.now()}`,
+          description,
+        });
+      } catch (orderError) {
+        console.warn("Razorpay order creation failed. Falling back to direct checkout.", orderError);
+      }
+
+      const response = await openRazorpayCheckout({
+        key: razorpayKeyId,
+        amount: Number(rental.totalAmount || 0),
+        orderId: order?.id,
+        name: "AgroConnect",
+        description,
+        prefill: {
+          name: currentUser?.name || rental.farmerName || "Farmer",
+          email: currentUser?.email || "farmer@demo.com",
+          contact: currentUser?.phone || "",
         },
-        ...cachedPayments.filter((payment) => payment.rentalId !== id),
-      ]);
-    }
-    notifyPaymentUpdated();
+        notes: {
+          rentalId: rental.id || "",
+          equipmentId: rental.equipmentId || "",
+          equipmentName: rental.equipmentName || "",
+        },
+      });
 
-    try {
-      const updatedRental = await updateRentalStatus(id, { status: "PAID", note: "Marked as paid" });
-      const updated = bookings.map((b) => (b.id === id ? { ...updatedRental, status: normalizeUiStatus(updatedRental.status) } : b));
-      setBookings(updated);
-      setStored(STORAGE_KEYS.rentals, updated);
-      notifyRentalUpdated();
-    } catch {
-      const updated = bookings.map((b) => (b.id === id ? { ...b, status: "Confirmed" } : b));
-      setBookings(updated);
-      setStored(STORAGE_KEYS.rentals, updated);
-      notifyRentalUpdated();
+      const paymentPayload = {
+        rentalId: rental.id,
+        equipmentId: rental.equipmentId,
+        equipmentName: rental.equipmentName,
+        farmerId: currentUser?.email || "farmer@demo.com",
+        farmerName: currentUser?.name || rental.farmerName || "Farmer",
+        ownerId: rental.ownerId || "",
+        ownerName: rental.ownerName || "",
+        amount: Number(rental.totalAmount || 0),
+        paymentMethod: "Razorpay",
+        gateway: "Razorpay",
+        transactionId: response.razorpay_payment_id,
+        receiptNumber: response.razorpay_order_id || order?.id || `rcpt-${Date.now()}`,
+        note: "Paid via Razorpay test mode from booking history",
+        status: "PAID",
+      };
+
+      try {
+        const paymentRecord = await createPayment(paymentPayload);
+        const cachedPayments = getStored(STORAGE_KEYS.payments, []);
+        setStored(STORAGE_KEYS.payments, [
+          paymentRecord,
+          ...cachedPayments.filter((payment) => payment.rentalId !== id),
+        ]);
+      } catch {
+        const now = new Date().toISOString();
+        const cachedPayments = getStored(STORAGE_KEYS.payments, []);
+        setStored(STORAGE_KEYS.payments, [
+          {
+            id: `pay-${Date.now()}`,
+            ...paymentPayload,
+            currency: "INR",
+            paidAt: now,
+            initiatedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          },
+          ...cachedPayments.filter((payment) => payment.rentalId !== id),
+        ]);
+      }
+      notifyPaymentUpdated();
+
+      try {
+        const updatedRental = await updateRentalStatus(id, { status: "PAID", note: "Paid via Razorpay" });
+        const updated = bookings.map((b) =>
+          b.id === id ? { ...updatedRental, status: normalizeUiStatus(updatedRental.status) } : b
+        );
+        setBookings(updated);
+        setStored(STORAGE_KEYS.rentals, updated);
+        notifyRentalUpdated();
+      } catch {
+        const updated = bookings.map((b) => (b.id === id ? { ...b, status: "Confirmed" } : b));
+        setBookings(updated);
+        setStored(STORAGE_KEYS.rentals, updated);
+        notifyRentalUpdated();
+      }
+    } catch (error) {
+      setPaymentWarning(getApiErrorMessage(error, "Unable to complete Razorpay checkout."));
+    } finally {
+      setProcessingId("");
     }
   };
 
@@ -203,6 +250,7 @@ const BookingHistory = () => {
 
   return (
     <div className="agr-page">
+      {paymentWarning && <div className="alert alert-warning mb-3">{paymentWarning}</div>}
       <div className="d-flex flex-column gap-3 mb-4">
         <div>
           <h2 className="agr-h1 mb-1">My Bookings</h2>
@@ -286,8 +334,12 @@ const BookingHistory = () => {
                         </button>
                       )}
                       {status.toLowerCase() === "pending" && (
-                        <button className="btn btn-warning btn-sm" onClick={() => handlePay(b.id)}>
-                          Pay Now
+                        <button
+                          className="btn btn-warning btn-sm"
+                          onClick={() => handlePay(b.id)}
+                          disabled={processingId === b.id}
+                        >
+                          {processingId === b.id ? "Opening Razorpay..." : "Pay Now"}
                         </button>
                       )}
                       <Link
