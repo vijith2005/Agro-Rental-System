@@ -43,6 +43,8 @@ const roleAccent = (role) => {
   return "success";
 };
 
+const ACTIVITY_PAGE_SIZE = 3;
+
 const Profile = () => {
   const cachedUser = useMemo(() => getCurrentUser(), []);
   const [profile, setProfile] = useState(() => buildProfileState(cachedUser));
@@ -57,6 +59,60 @@ const Profile = () => {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadProfile = async () => {
+      if (!cachedUser) {
+        setIsBootstrapping(false);
+        return;
+      }
+
+      try {
+        const authUser = await getMyAuthUser();
+        const sessionUser = mapAuthUserToSessionUser(authUser);
+        const remoteProfile = await ensureMyProfile(sessionUser);
+        const mergedUser = mergeProfileIntoUser(sessionUser, remoteProfile);
+
+        if (!isActive) {
+          return;
+        }
+
+        syncCurrentUser(mergedUser);
+        setProfile(buildProfileState(mergedUser));
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+
+        setMessage({
+          variant: "warning",
+          text: getApiErrorMessage(
+            error,
+            "Unable to load the latest profile details. Showing the saved session data instead."
+          ),
+        });
+      } finally {
+        if (isActive) {
+          setIsBootstrapping(false);
+        }
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      isActive = false;
+    };
+  }, [cachedUser]);
+
+  useEffect(() => {
+    setActivityPage((currentPage) => {
+      const totalPages = Math.max(1, Math.ceil(activity.length / ACTIVITY_PAGE_SIZE));
+      return Math.min(currentPage, totalPages);
+    });
+  }, [activity.length]);
 
   useEffect(() => {
     let isActive = true;

@@ -279,6 +279,11 @@ const Payments = () => {
 
   return (
     <div className="agr-page">
+      {warnings.map((warning) => (
+        <div className="alert alert-warning mb-3" key={warning}>
+          {warning}
+        </div>
+      ))}
       <div className="d-flex flex-column gap-3 mb-4">
         <div className="d-flex flex-wrap justify-content-between gap-3">
           <div>

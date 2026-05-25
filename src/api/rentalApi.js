@@ -15,21 +15,27 @@ export const scheduleRental = async (id, payload) => {
   return data;
 };
 
+<<<<<<< HEAD
 export const assignReturnPickup = async (id, payload) => {
   const { data } = await rentalClient.put(`/rentals/${id}/return-assignment`, payload);
   return data;
 };
 
+=======
+>>>>>>> origin/main
 export const updateRentalStatus = async (id, payload) => {
   const { data } = await rentalClient.put(`/rentals/${id}/status`, payload);
   return data;
 };
 
+<<<<<<< HEAD
 export const listAllRentals = async () => {
   const { data } = await rentalClient.get("/rentals");
   return data;
 };
 
+=======
+>>>>>>> origin/main
 export const listRentalsByFarmer = async (farmerId) => {
   const { data } = await rentalClient.get(`/rentals/farmer/${encodeURIComponent(farmerId)}`);
   return data;

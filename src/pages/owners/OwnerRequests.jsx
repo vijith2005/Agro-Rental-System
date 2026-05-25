@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
+<<<<<<< HEAD
 import { approveRental, listRentalsByOwner, updateRentalStatus } from "../../api/rentalApi";
 import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
 import { getCurrentUser } from "../../utils/session";
@@ -10,17 +11,27 @@ import { formatBookingDate } from "../../utils/bookingDates";
 import { mergeRentalsById } from "../../utils/rentalCache";
 
 const formatCurrency = (amount) => `Rs ${new Intl.NumberFormat("en-IN").format(Number(amount) || 0)}`;
+=======
+import { approveRental, listRentalsByOwner } from "../../api/rentalApi";
+import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
+import { getCurrentUser } from "../../utils/session";
+import { RENTAL_UPDATED_EVENT, notifyRentalUpdated } from "../../utils/rentalEvents";
+>>>>>>> origin/main
 
 const OwnerRequests = () => {
   const [page, setPage] = useState(1);
   const pageSize = 5;
   const [rentals, setRentals] = useState(getStored(STORAGE_KEYS.rentals, []));
   const [loadError, setLoadError] = useState("");
+<<<<<<< HEAD
   const [cancelModal, setCancelModal] = useState({ open: false, rental: null });
+=======
+>>>>>>> origin/main
 
   const currentUser = getCurrentUser();
   const ownerKey = currentUser?.email || "owner@demo.com";
 
+<<<<<<< HEAD
   const persistRentals = (nextOwnerRentals) => {
     const cached = getStored(STORAGE_KEYS.rentals, []);
     const merged = mergeRentalsById(nextOwnerRentals, cached);
@@ -51,6 +62,26 @@ const OwnerRequests = () => {
       }
     };
 
+=======
+  useEffect(() => {
+    let active = true;
+
+    const loadRentals = async () => {
+      try {
+        const data = await listRentalsByOwner(ownerKey);
+        const content = Array.isArray(data) ? data : [];
+        if (!active) return;
+        setRentals(content);
+        setStored(STORAGE_KEYS.rentals, content);
+        setLoadError("");
+      } catch {
+        if (active) {
+          setLoadError("Using cached rentals because the backend is unavailable.");
+        }
+      }
+    };
+
+>>>>>>> origin/main
     loadRentals();
     const onRentalUpdated = () => loadRentals();
     window.addEventListener(RENTAL_UPDATED_EVENT, onRentalUpdated);
@@ -66,12 +97,18 @@ const OwnerRequests = () => {
     try {
       const updated = await approveRental(rentalId, { approvalNote: "Approved from owner dashboard" });
       const nextRentals = rentals.map((rental) => (rental.id === rentalId ? updated : rental));
+<<<<<<< HEAD
       persistRentals(nextRentals);
+=======
+      setRentals(nextRentals);
+      setStored(STORAGE_KEYS.rentals, nextRentals);
+>>>>>>> origin/main
       notifyRentalUpdated();
     } catch {
       const nextRentals = rentals.map((rental) =>
         rental.id === rentalId ? { ...rental, status: "APPROVED" } : rental
       );
+<<<<<<< HEAD
       persistRentals(nextRentals);
       notifyRentalUpdated();
     }
@@ -100,6 +137,12 @@ const OwnerRequests = () => {
     }
 
     closeCancel();
+=======
+      setRentals(nextRentals);
+      setStored(STORAGE_KEYS.rentals, nextRentals);
+      notifyRentalUpdated();
+    }
+>>>>>>> origin/main
   };
 
   const totalPages = Math.max(1, Math.ceil(requestList.length / pageSize));
@@ -144,16 +187,22 @@ const OwnerRequests = () => {
               <div key={rental.id} className="list-card owner-request-card">
                 <div className="owner-request-copy">
                   <div className="equipment-name">{rental.equipmentName}</div>
+<<<<<<< HEAD
                   <div className="list-meta">Requested by {rental.farmerName || rental.farmerId || "Farmer"}</div>
                   <div className="list-meta owner-request-date">
                     {formatBookingDate(rental.startDate) || "-"} to {formatBookingDate(rental.endDate) || "-"} |{" "}
                     {formatCurrency(rental.totalAmount)}
+=======
+                  <div className="list-meta">
+                    {rental.startDate} to {rental.endDate} • Rs {rental.totalAmount}
+>>>>>>> origin/main
                   </div>
                 </div>
                 <div className="owner-request-actions">
                   <span className={`status-pill status-${rental.status.toLowerCase()}`}>
                     {rental.status}
                   </span>
+<<<<<<< HEAD
                   <div className="owner-request-buttons">
                     {["REQUESTED", "PENDING"].includes((rental.status || "").toUpperCase()) && (
                       <button className="inline-btn" onClick={() => approveRequest(rental.id)}>
@@ -169,6 +218,18 @@ const OwnerRequests = () => {
                       Message
                     </Link>
                   </div>
+=======
+                  {rental.status === "REQUESTED" ? (
+                    <button className="inline-btn" onClick={() => approveRequest(rental.id)}>
+                      Approve
+                    </button>
+                  ) : (
+                    <span className="inline-btn">Approved</span>
+                  )}
+                  <Link to={`/owner/messages?rentalId=${encodeURIComponent(rental.id)}`} className="inline-btn">
+                    Message
+                  </Link>
+>>>>>>> origin/main
                 </div>
               </div>
             ))}

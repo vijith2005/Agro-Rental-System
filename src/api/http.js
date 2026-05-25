@@ -16,11 +16,14 @@ const paymentBaseUrl =
   import.meta.env.VITE_PAYMENT_API_URL ||
   "http://localhost:8085/api";
 
+<<<<<<< HEAD
 const normalizePaymentBaseUrl = (url) => {
   if (!url) return "http://localhost:8085/api";
   return url.replace(/\/payments\/?$/i, "");
 };
 
+=======
+>>>>>>> origin/main
 const attachAuthInterceptor = (client) => {
   client.interceptors.request.use((config) => {
     const token = getAuthToken();
@@ -73,7 +76,11 @@ export const rentalClient = axios.create({
 });
 
 export const paymentClient = axios.create({
+<<<<<<< HEAD
   baseURL: normalizePaymentBaseUrl(paymentBaseUrl),
+=======
+  baseURL: paymentBaseUrl,
+>>>>>>> origin/main
   headers: {
     "Content-Type": "application/json",
   },
