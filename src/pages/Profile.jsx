@@ -16,6 +16,7 @@ import {
   normalizeRole,
 } from "../utils/auth";
 import {
+  getAuthHistoryForUser,
   getCurrentUser,
   hasPersistentSession,
   pushAuthHistory,
@@ -59,6 +60,16 @@ const Profile = () => {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [activityPage, setActivityPage] = useState(1);
+
+  const activity = useMemo(() => getAuthHistoryForUser(cachedUser), [cachedUser]);
+  const activityPageCount = Math.max(1, Math.ceil(activity.length / ACTIVITY_PAGE_SIZE));
+  const activityStart = activity.length === 0 ? 0 : (activityPage - 1) * ACTIVITY_PAGE_SIZE + 1;
+  const activityEnd = Math.min(activityPage * ACTIVITY_PAGE_SIZE, activity.length);
+  const activityPageDots = useMemo(
+    () => Array.from({ length: activityPageCount }, (_, index) => index + 1),
+    [activityPageCount]
+  );
 
   useEffect(() => {
     let isActive = true;
@@ -108,58 +119,8 @@ const Profile = () => {
   }, [cachedUser]);
 
   useEffect(() => {
-    setActivityPage((currentPage) => {
-      const totalPages = Math.max(1, Math.ceil(activity.length / ACTIVITY_PAGE_SIZE));
-      return Math.min(currentPage, totalPages);
-    });
-  }, [activity.length]);
-
-  useEffect(() => {
-    let isActive = true;
-
-    const loadProfile = async () => {
-      if (!cachedUser) {
-        setIsBootstrapping(false);
-        return;
-      }
-
-      try {
-        const authUser = await getMyAuthUser();
-        const sessionUser = mapAuthUserToSessionUser(authUser);
-        const remoteProfile = await ensureMyProfile(sessionUser);
-        const mergedUser = mergeProfileIntoUser(sessionUser, remoteProfile);
-
-        if (!isActive) {
-          return;
-        }
-
-        syncCurrentUser(mergedUser);
-        setProfile(buildProfileState(mergedUser));
-      } catch (error) {
-        if (!isActive) {
-          return;
-        }
-
-        setMessage({
-          variant: "warning",
-          text: getApiErrorMessage(
-            error,
-            "Unable to load the latest profile details. Showing the saved session data instead."
-          ),
-        });
-      } finally {
-        if (isActive) {
-          setIsBootstrapping(false);
-        }
-      }
-    };
-
-    loadProfile();
-
-    return () => {
-      isActive = false;
-    };
-  }, [cachedUser]);
+    setActivityPage((currentPage) => Math.min(currentPage, activityPageCount));
+  }, [activityPageCount]);
 
   const initials = useMemo(() => {
     const seed = profile.name || profile.email || "AG";
@@ -172,13 +133,6 @@ const Profile = () => {
   }, [profile.email, profile.name]);
 
   const isFarmer = profile.role === "farmer";
-  const activity = [];
-  const activityPage = 1;
-  const activityPageCount = 1;
-  const activityPageDots = [];
-  const activityStart = 0;
-  const activityEnd = 0;
-  const setActivityPage = () => {};
 
   useEffect(() => {
     let isActive = true;

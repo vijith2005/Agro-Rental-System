@@ -1,6 +1,8 @@
 import { profileClient } from "./http";
 import { normalizeRole, toBackendRole } from "../utils/auth";
 
+const cleanText = (value) => String(value || "").trim();
+
 export const getMyProfile = async () => {
   const { data } = await profileClient.get("/profiles/me");
   return data;
@@ -9,9 +11,9 @@ export const getMyProfile = async () => {
 export const syncMyProfile = async (user) => {
   const { data } = await profileClient.post("/profiles/sync", {
     authUserId: user.id,
-    name: user.name,
-    email: user.email,
-    phone: user.phone,
+    name: cleanText(user.name),
+    email: cleanText(user.email).toLowerCase(),
+    phone: cleanText(user.phone),
     role: toBackendRole(user.role),
   });
 
@@ -35,14 +37,11 @@ export const ensureMyProfile = async (user) => {
   }
 };
 
-<<<<<<< HEAD
 export const listProfiles = async (params = {}) => {
   const { data } = await profileClient.get("/profiles", { params });
   return data;
 };
 
-=======
->>>>>>> origin/main
 export const updateMyProfile = async ({
   name,
   phone,
@@ -53,13 +52,13 @@ export const updateMyProfile = async ({
   crops,
 }) => {
   const { data } = await profileClient.put("/profiles/me", {
-    name: name.trim(),
-    phone: phone.trim(),
-    address: address?.trim() || "",
-    state: state?.trim() || "",
-    district: district?.trim() || "",
+    name: cleanText(name),
+    phone: cleanText(phone),
+    address: cleanText(address),
+    state: cleanText(state),
+    district: cleanText(district),
     farmSize: farmSize?.toString().trim() || "",
-    crops: crops?.trim() || "",
+    crops: cleanText(crops),
   });
 
   return data;

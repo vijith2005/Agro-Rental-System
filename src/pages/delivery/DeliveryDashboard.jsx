@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Card, Col, Row, Table } from "react-bootstrap";
 import toast from "react-hot-toast";
 import PaginationControls from "../../components/PaginationControls";
@@ -50,7 +50,7 @@ function DeliveryDashboard() {
         const unseen = nextReminders.filter((reminder) => !seenIds.has(reminder.id));
         if (unseen.length > 0) {
           toast(`You have ${unseen.length} return pickup reminder${unseen.length === 1 ? "" : "s"}.`, {
-            icon: "⏰",
+            icon: "!",
           });
           markSeenDeliveryReminderIds(unseen.map((reminder) => reminder.id));
         }
@@ -68,10 +68,10 @@ function DeliveryDashboard() {
     };
   }, [agentKey]);
 
-  const isReturnTaskAssignedToCurrentAgent = (rental) => {
+  const isReturnTaskAssignedToCurrentAgent = useCallback((rental) => {
     const assignedAgent = (rental?.returnAgentId || rental?.agentId || "").toString().trim().toLowerCase();
     return Boolean(assignedAgent) && assignedAgent === normalizedAgentKey;
-  };
+  }, [normalizedAgentKey]);
 
   const summary = useMemo(() => {
     const pickupRequests = rentals.filter((r) => ["REQUESTED", "APPROVED", "SCHEDULED"].includes((r.status || "").toUpperCase())).length;
@@ -88,7 +88,7 @@ function DeliveryDashboard() {
       { label: "Return pickups", value: returnRequests },
       { label: "Completed", value: completed },
     ];
-  }, [rentals]);
+  }, [isReturnTaskAssignedToCurrentAgent, rentals]);
 
   const totalPages = Math.max(1, Math.ceil(rentals.length / PAGE_SIZE));
   const pageItems = rentals.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);

@@ -1,11 +1,14 @@
 import { authClient } from "./http";
 import { toBackendRole } from "../utils/auth";
 
+const cleanText = (value) => String(value || "").trim();
+const cleanEmail = (value) => cleanText(value).toLowerCase();
+
 export const registerUser = async ({ name, email, phone, password, role }) => {
   const { data } = await authClient.post("/auth/register", {
-    name: name.trim(),
-    email: email.trim().toLowerCase(),
-    phone: phone.trim(),
+    name: cleanText(name),
+    email: cleanEmail(email),
+    phone: cleanText(phone),
     password,
     role: toBackendRole(role),
   });
@@ -15,7 +18,7 @@ export const registerUser = async ({ name, email, phone, password, role }) => {
 
 export const loginUser = async ({ email, password }) => {
   const { data } = await authClient.post("/auth/login", {
-    email: email.trim().toLowerCase(),
+    email: cleanEmail(email),
     password,
   });
 
@@ -27,19 +30,16 @@ export const getMyAuthUser = async () => {
   return data;
 };
 
-<<<<<<< HEAD
 export const listUsers = async () => {
   const { data } = await authClient.get("/users");
   return data;
 };
 
-=======
->>>>>>> origin/main
 export const updateMyAuthUser = async ({ name, email, phone }) => {
   const { data } = await authClient.put("/users/me", {
-    name: name.trim(),
-    email: email.trim().toLowerCase(),
-    phone: phone.trim(),
+    name: cleanText(name),
+    email: cleanEmail(email),
+    phone: cleanText(phone),
   });
 
   return data;

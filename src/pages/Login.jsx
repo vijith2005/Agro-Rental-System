@@ -7,6 +7,7 @@ import bgImage from "../assets/hero.jpg";
 import SiteFooter from "../components/SiteFooter";
 import { mapAuthUserToSessionUser, mergeProfileIntoUser, routeByRole } from "../utils/auth";
 import { loginUser } from "../api/authApi";
+import { getApiErrorMessage } from "../api/http";
 import { ensureMyProfile } from "../api/profileApi";
 import { saveSession, syncCurrentUser, pushAuthHistory } from "../utils/session";
 
@@ -60,11 +61,11 @@ export default function LoginPage() {
       pushAuthHistory("LOGIN", sessionUser);
       navigate(routeByRole(sessionUser.role));
     } catch (apiError) {
-      setError(
-        apiError?.response?.data?.message ||
-          apiError?.response?.data?.fieldErrors?.email ||
-          "Unable to sign in. Please check your credentials."
-      );
+      const fallback =
+        apiError?.response?.status === 401
+          ? "Invalid email or password."
+          : "Unable to sign in. Please make sure the auth service is running.";
+      setError(getApiErrorMessage(apiError, fallback));
     } finally {
       setIsLoading(false);
     }

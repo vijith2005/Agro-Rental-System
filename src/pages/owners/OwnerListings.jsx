@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-=======
-import React, { useEffect, useMemo, useState } from "react";
->>>>>>> origin/main
+﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
@@ -41,11 +37,7 @@ const OwnerListings = () => {
     imageUrl: "",
   });
 
-<<<<<<< HEAD
   const loadMyListings = useCallback(async () => {
-=======
-  const loadMyListings = async () => {
->>>>>>> origin/main
     setIsLoading(true);
     setLoadError("");
 
@@ -59,19 +51,11 @@ const OwnerListings = () => {
     } finally {
       setIsLoading(false);
     }
-<<<<<<< HEAD
   }, [ownerKey]);
 
   useEffect(() => {
     loadMyListings();
   }, [loadMyListings]);
-=======
-  };
-
-  useEffect(() => {
-    loadMyListings();
-  }, []);
->>>>>>> origin/main
 
   const handleMapSelect = async (event) => {
     const { lat, lng } = event.latlng;
@@ -127,7 +111,6 @@ const OwnerListings = () => {
 
     if (!formState.name.trim()) return;
 
-<<<<<<< HEAD
     const selectedCategory =
       formState.category === OTHER_CATEGORY_OPTION ? formState.customCategory.trim() : formState.category;
 
@@ -155,27 +138,6 @@ const OwnerListings = () => {
         status: "AVAILABLE",
       };
 
-=======
-    setSaving(true);
-    try {
-      const payload = {
-        name: formState.name.trim(),
-        category: formState.category,
-        description: "Owner listed equipment",
-        day: Number(formState.day) || 0,
-        week: Number(formState.day) ? Number(formState.day) * 6 : undefined,
-        month: Number(formState.day) ? Number(formState.day) * 24 : undefined,
-        location: formState.location || "Region",
-        rating: 4.5,
-        imageKey: "hero",
-        imageUrl: formState.imageUrl?.trim() || "",
-        ownerName: currentUser?.name || "Owner",
-        lat: Number(formState.lat) || 11.0168,
-        lng: Number(formState.lng) || 76.9558,
-        status: "AVAILABLE",
-      };
-
->>>>>>> origin/main
       const created = await createEquipment(payload);
       const next = [created, ...myListings.filter((item) => item.id !== created.id)];
       setEquipments(next);
@@ -183,10 +145,7 @@ const OwnerListings = () => {
       setFormState({
         name: "",
         category: "Tractor",
-<<<<<<< HEAD
         customCategory: "",
-=======
->>>>>>> origin/main
         day: 800,
         location: "",
         lat: 11.0168,
@@ -261,13 +220,6 @@ const OwnerListings = () => {
               onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
             />
           </div>
-<<<<<<< HEAD
-=======
-          <div className="form-field">
-            <label>Product Image</label>
-            <input type="file" accept="image/*" />
-          </div>
->>>>>>> origin/main
           <div className="form-field">
             <label>Category</label>
             <select

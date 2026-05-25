@@ -1,11 +1,11 @@
 import axios from "axios";
-import { readStoredToken } from "./authApi";
+import { getAuthToken } from "./session";
 
 const DEFAULT_PAYMENT_API_URL = "http://localhost:8085/api";
 
 const normalizePaymentBaseUrl = (url) => {
   if (!url) return DEFAULT_PAYMENT_API_URL;
-  return url.replace(/\/payments\/?$/i, "");
+  return String(url).trim().replace(/\/+$/, "").replace(/\/payments$/i, "");
 };
 
 export const PAYMENT_API_URL = normalizePaymentBaseUrl(
@@ -19,7 +19,15 @@ export const paymentApi = axios.create({
   },
 });
 
+paymentApi.interceptors.request.use((config) => {
+  const token = getAuthToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export const paymentAuthHeaders = () => {
-  const token = readStoredToken();
+  const token = getAuthToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 };

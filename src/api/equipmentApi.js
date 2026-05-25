@@ -1,10 +1,20 @@
 import { equipmentClient } from "./http";
 
+const pathId = (id) => encodeURIComponent(id);
+
 const buildQueryString = (params = {}) => {
   const searchParams = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined || value === null || value === "") return;
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (item !== undefined && item !== null && item !== "") {
+          searchParams.append(key, item);
+        }
+      });
+      return;
+    }
     searchParams.set(key, value);
   });
 
@@ -18,7 +28,7 @@ export const listEquipment = async (params = {}) => {
 };
 
 export const getEquipmentById = async (id) => {
-  const { data } = await equipmentClient.get(`/equipment/${id}`);
+  const { data } = await equipmentClient.get(`/equipment/${pathId(id)}`);
   return data;
 };
 
@@ -28,16 +38,16 @@ export const createEquipment = async (payload) => {
 };
 
 export const updateEquipment = async (id, payload) => {
-  const { data } = await equipmentClient.put(`/equipment/${id}`, payload);
+  const { data } = await equipmentClient.put(`/equipment/${pathId(id)}`, payload);
   return data;
 };
 
 export const updateEquipmentStatus = async (id, status) => {
-  const { data } = await equipmentClient.patch(`/equipment/${id}/status`, { status });
+  const { data } = await equipmentClient.patch(`/equipment/${pathId(id)}/status`, { status });
   return data;
 };
 
 export const deleteEquipment = async (id) => {
-  const { data } = await equipmentClient.delete(`/equipment/${id}`);
+  const { data } = await equipmentClient.delete(`/equipment/${pathId(id)}`);
   return data;
 };

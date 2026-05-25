@@ -1,29 +1,39 @@
 import axios from "axios";
 import { clearSession, getAuthToken } from "../utils/session";
 
-const authBaseUrl =
-  import.meta.env.VITE_AUTH_API_URL || "http://localhost:8081/api/v1";
-const profileBaseUrl =
-  import.meta.env.VITE_USER_MANAGEMENT_API_URL ||
-  "http://localhost:8082/api/v1/user-management";
-const equipmentBaseUrl =
-  import.meta.env.VITE_EQUIPMENT_API_URL ||
-  "http://localhost:8083/api/v1";
-const rentalBaseUrl =
-  import.meta.env.VITE_RENTAL_API_URL ||
-  "http://localhost:8084/api";
-const paymentBaseUrl =
-  import.meta.env.VITE_PAYMENT_API_URL ||
-  "http://localhost:8085/api";
+const trimTrailingSlash = (url) => String(url || "").trim().replace(/\/+$/, "");
 
-<<<<<<< HEAD
-const normalizePaymentBaseUrl = (url) => {
-  if (!url) return "http://localhost:8085/api";
-  return url.replace(/\/payments\/?$/i, "");
+const normalizeServiceBaseUrl = (url, fallbackUrl, endpointPattern) => {
+  const baseUrl = trimTrailingSlash(url || fallbackUrl);
+  return endpointPattern ? baseUrl.replace(endpointPattern, "") : baseUrl;
 };
 
-=======
->>>>>>> origin/main
+const authBaseUrl = normalizeServiceBaseUrl(
+  import.meta.env.VITE_AUTH_API_URL,
+  "http://localhost:8081/api/v1",
+  /\/(?:auth|users)$/i
+);
+const profileBaseUrl = normalizeServiceBaseUrl(
+  import.meta.env.VITE_USER_MANAGEMENT_API_URL,
+  "http://localhost:8082/api/v1/user-management",
+  /\/profiles$/i
+);
+const equipmentBaseUrl = normalizeServiceBaseUrl(
+  import.meta.env.VITE_EQUIPMENT_API_URL,
+  "http://localhost:8083/api/v1",
+  /\/equipment$/i
+);
+const rentalBaseUrl = normalizeServiceBaseUrl(
+  import.meta.env.VITE_RENTAL_API_URL,
+  "http://localhost:8084/api",
+  /\/(?:rentals|messages|damage-reports|tickets)$/i
+);
+const paymentBaseUrl = normalizeServiceBaseUrl(
+  import.meta.env.VITE_PAYMENT_API_URL,
+  "http://localhost:8085/api",
+  /\/payments$/i
+);
+
 const attachAuthInterceptor = (client) => {
   client.interceptors.request.use((config) => {
     const token = getAuthToken();
@@ -76,11 +86,7 @@ export const rentalClient = axios.create({
 });
 
 export const paymentClient = axios.create({
-<<<<<<< HEAD
-  baseURL: normalizePaymentBaseUrl(paymentBaseUrl),
-=======
   baseURL: paymentBaseUrl,
->>>>>>> origin/main
   headers: {
     "Content-Type": "application/json",
   },

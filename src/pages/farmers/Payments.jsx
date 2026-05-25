@@ -27,6 +27,7 @@ const Payments = () => {
   const farmerKey = getCurrentUser()?.email || "farmer@demo.com";
   const farmerName = getCurrentUser()?.name || "Farmer";
   const razorpayKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
+  const warnings = [];
 
   useEffect(() => {
     let active = true;
