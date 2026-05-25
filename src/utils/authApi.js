@@ -1,9 +1,21 @@
 import axios from "axios";
 import { normalizeRole } from "./auth";
+import {
+  clearSession,
+  getAuthToken,
+  getCurrentUser,
+  saveSession,
+} from "./session";
 
 const DEFAULT_AUTH_API_URL = "http://localhost:8081/api/v1";
 
-export const AUTH_API_URL = import.meta.env.VITE_AUTH_API_URL || DEFAULT_AUTH_API_URL;
+const normalizeAuthBaseUrl = (url) =>
+  String(url || DEFAULT_AUTH_API_URL)
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/(?:auth|users)$/i, "");
+
+export const AUTH_API_URL = normalizeAuthBaseUrl(import.meta.env.VITE_AUTH_API_URL);
 
 export const authApi = axios.create({
   baseURL: AUTH_API_URL,
@@ -12,43 +24,28 @@ export const authApi = axios.create({
   },
 });
 
-export const clearAuthSession = () => {
-  [
-    localStorage,
-    sessionStorage,
-  ].forEach((storage) => {
-    storage.removeItem("currentUser");
-    storage.removeItem("user");
-    storage.removeItem("agro_token");
-  });
-};
-
-export const storeAuthSession = (user, token, rememberMe = false) => {
-  clearAuthSession();
-  const storage = rememberMe ? localStorage : sessionStorage;
-  storage.setItem("currentUser", JSON.stringify(user));
-  storage.setItem("user", JSON.stringify(user));
-  storage.setItem("agro_token", token);
-};
-
-export const readStoredUser = () => {
-  try {
-    return (
-      JSON.parse(localStorage.getItem("currentUser")) ||
-      JSON.parse(sessionStorage.getItem("currentUser")) ||
-      JSON.parse(localStorage.getItem("user")) ||
-      JSON.parse(sessionStorage.getItem("user")) ||
-      null
-    );
-  } catch {
-    return null;
+authApi.interceptors.request.use((config) => {
+  const token = getAuthToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
-};
+  return config;
+});
 
-export const readStoredToken = () =>
-  localStorage.getItem("agro_token") ||
-  sessionStorage.getItem("agro_token") ||
-  "";
+authApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      clearSession();
+    }
+    return Promise.reject(error);
+  }
+);
+
+export const clearAuthSession = clearSession;
+export const storeAuthSession = saveSession;
+export const readStoredUser = getCurrentUser;
+export const readStoredToken = getAuthToken;
 
 export const normalizeAuthUser = (user) => {
   if (!user) {

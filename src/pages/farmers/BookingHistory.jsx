@@ -142,44 +142,6 @@ const BookingHistory = () => {
 
     try {
       const description = `${rental.equipmentName || "Equipment"} rental payment`;
-      const completeLocally = async (receiptNumber, note, toastMessage) => {
-        const now = new Date().toISOString();
-        const fallbackPayment = {
-          id: `pay-${Date.now()}`,
-          rentalId: rental.id,
-          equipmentId: rental.equipmentId,
-          equipmentName: rental.equipmentName,
-          farmerId: currentUser?.email || "farmer@demo.com",
-          farmerName: currentUser?.name || rental.farmerName || "Farmer",
-          ownerId: rental.ownerId || "",
-          ownerName: rental.ownerName || "",
-          amount: Number(rental.totalAmount || 0),
-          currency: "INR",
-          paymentMethod: "Manual",
-          gateway: "Manual",
-          transactionId: `txn-${Date.now()}`,
-          receiptNumber,
-          note,
-          status: "PAID",
-          initiatedAt: now,
-          paidAt: now,
-          createdAt: now,
-          updatedAt: now,
-        };
-        const cachedPayments = getStored(STORAGE_KEYS.payments, []);
-        setStored(STORAGE_KEYS.payments, [
-          fallbackPayment,
-          ...cachedPayments.filter((payment) => payment.rentalId !== id),
-        ]);
-        notifyPaymentUpdated();
-
-        const updated = bookings.map((b) => (b.id === id ? { ...b, status: "Confirmed" } : b));
-        setBookings(updated);
-        setStored(STORAGE_KEYS.rentals, updated);
-        notifyRentalUpdated();
-        toast.success(toastMessage);
-      };
-
       try {
         const order = await createRazorpayOrder({
           amount: Math.round(Number(rental.totalAmount || 0)),
@@ -275,23 +237,6 @@ const BookingHistory = () => {
       toast.error(getApiErrorMessage(error, "Unable to complete Razorpay checkout."));
     } finally {
       setProcessingId("");
-    }
-  };
-
-  const handleComplete = async (id) => {
-    try {
-      const updatedRental = await updateRentalStatus(id, { status: "COMPLETED", note: "Completed by farmer" });
-      const updated = bookings.map((b) =>
-        b.id === id ? { ...updatedRental, status: normalizeUiStatus(updatedRental.status) } : b
-      );
-      setBookings(updated);
-      setStored(STORAGE_KEYS.rentals, updated);
-      notifyRentalUpdated();
-    } catch {
-      const updated = bookings.map((b) => (b.id === id ? { ...b, status: "Completed" } : b));
-      setBookings(updated);
-      setStored(STORAGE_KEYS.rentals, updated);
-      notifyRentalUpdated();
     }
   };
 

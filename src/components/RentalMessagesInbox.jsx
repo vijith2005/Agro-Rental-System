@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { getApiErrorMessage } from "../api/http";
 import {
   getRentalMessages,
-  listRentalsByAgent,
   listRentalsByFarmer,
   listRentalsByOwner,
   sendRentalMessage,
