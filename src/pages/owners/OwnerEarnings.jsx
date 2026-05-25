@@ -1,32 +1,80 @@
-﻿import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
-import { getStored, STORAGE_KEYS } from "../../utils/storage";
-import { readStoredUser } from "../../utils/authApi";
+import { listEquipment } from "../../api/equipmentApi";
+import { listPaymentsByOwner } from "../../api/paymentApi";
+import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
+import { getCurrentUser } from "../../utils/session";
+import { PAYMENT_UPDATED_EVENT } from "../../utils/paymentEvents";
 
 const OwnerEarnings = () => {
-  const invoices = getStored(STORAGE_KEYS.invoices, []);
-  const rentals = getStored(STORAGE_KEYS.rentals, []);
-  const equipments = getStored(STORAGE_KEYS.equipments, []);
-
-  const currentUser = readStoredUser();
-  const ownerKey = currentUser?.email || "owner@demo.com";
-
+  const [equipments, setEquipments] = useState(() => getStored(STORAGE_KEYS.equipments, []));
+  const [payments, setPayments] = useState(() => getStored(STORAGE_KEYS.payments, []));
+  const [equipmentWarning, setEquipmentWarning] = useState("");
+  const [paymentWarning, setPaymentWarning] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 5;
-  const paidInvoices = invoices.filter((invoice) => invoice.status === "PAID");
 
-  const earningsRows = paidInvoices
-    .map((invoice) => {
-      const rental = rentals.find((item) => item.id === invoice.rentalId);
-      const equipment = equipments.find((item) => item.id === rental?.equipmentId);
-      if (equipment?.ownerId && equipment.ownerId !== ownerKey) return null;
-      return { invoice, rental, equipment };
-    })
-    .filter(Boolean);
+  const currentUser = getCurrentUser();
+  const ownerKey = currentUser?.email || "owner@demo.com";
 
-  const total = earningsRows.reduce((sum, row) => sum + row.invoice.amount, 0);
+  useEffect(() => {
+    let active = true;
+
+    const loadEquipment = async () => {
+      try {
+        const data = await listEquipment({ ownerId: ownerKey, page: 0, size: 100 });
+        const content = data?.content || [];
+        if (!active) return;
+        setEquipments(content);
+        setEquipmentWarning("");
+      } catch {
+        if (active) {
+          setEquipmentWarning("Using cached equipment because the backend is unavailable.");
+        }
+      }
+    };
+
+    const loadPayments = async () => {
+      try {
+        const data = await listPaymentsByOwner(ownerKey);
+        const content = Array.isArray(data) ? data : [];
+        if (!active) return;
+        setPayments(content);
+        setStored(STORAGE_KEYS.payments, content);
+        setPaymentWarning("");
+      } catch {
+        if (!active) return;
+        setPayments(getStored(STORAGE_KEYS.payments, []));
+        setPaymentWarning("Using cached payments because the backend is unavailable.");
+      }
+    };
+
+    loadEquipment();
+    loadPayments();
+
+    const onPaymentUpdated = () => loadPayments();
+    window.addEventListener(PAYMENT_UPDATED_EVENT, onPaymentUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener(PAYMENT_UPDATED_EVENT, onPaymentUpdated);
+    };
+  }, [ownerKey]);
+
+  const earningsRows = useMemo(
+    () =>
+      payments
+        .filter((payment) => (payment.ownerId || "").toLowerCase() === ownerKey.toLowerCase())
+        .filter((payment) => (payment.status || "").toUpperCase() === "PAID")
+        .map((payment) => {
+          const equipment = equipments.find((item) => item.id === payment.equipmentId);
+          return { payment, equipment };
+        }),
+    [equipments, ownerKey, payments]
+  );
+
+  const total = earningsRows.reduce((sum, row) => sum + Number(row.payment.amount || 0), 0);
   const totalPages = Math.max(1, Math.ceil(earningsRows.length / pageSize));
   const pageItems = earningsRows.slice((page - 1) * pageSize, page * pageSize);
 
@@ -36,28 +84,22 @@ const OwnerEarnings = () => {
 
   const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-  const ownerEquipmentIds = useMemo(
-    () => equipments.filter((eq) => !eq.ownerId || eq.ownerId === ownerKey).map((eq) => eq.id),
-    [equipments, ownerKey]
-  );
-
   const bookingsByMonth = useMemo(() => {
     const buckets = Array(12).fill(0);
-    rentals.forEach((rental) => {
-      if (!ownerEquipmentIds.includes(rental.equipmentId)) return;
-      const date = new Date(rental.createdAt || rental.startDate);
+    earningsRows.forEach((row) => {
+      const date = new Date(row.payment.paidAt || row.payment.createdAt);
       if (Number.isNaN(date.getTime())) return;
       buckets[date.getMonth()] += 1;
     });
     return buckets;
-  }, [rentals, ownerEquipmentIds]);
+  }, [earningsRows]);
 
   const earningsByMonth = useMemo(() => {
     const buckets = Array(12).fill(0);
     earningsRows.forEach((row) => {
-      const date = new Date(row.invoice.createdAt || row.rental?.startDate);
+      const date = new Date(row.payment.paidAt || row.payment.createdAt);
       if (Number.isNaN(date.getTime())) return;
-      buckets[date.getMonth()] += row.invoice.amount;
+      buckets[date.getMonth()] += Number(row.payment.amount || 0);
     });
     return buckets;
   }, [earningsRows]);
@@ -75,6 +117,8 @@ const OwnerEarnings = () => {
 
   return (
     <div className="agr-page owner-dashboard">
+      {equipmentWarning && <div className="alert alert-warning mb-3">{equipmentWarning}</div>}
+      {paymentWarning && <div className="alert alert-warning mb-3">{paymentWarning}</div>}
       <div className="page-header">
         <div>
           <div className="page-title">Earnings</div>
@@ -87,19 +131,21 @@ const OwnerEarnings = () => {
 
       <div className="detail-card" style={{ marginBottom: 20 }}>
         <div className="equipment-name">Total Earnings</div>
-        <div className="page-title">₹{total}</div>
+        <div className="page-title">Rs {total}</div>
       </div>
 
       <div className="detail-card" style={{ marginBottom: 24 }}>
-        <div className="page-title" style={{ fontSize: 18, marginBottom: 12 }}>Monthly performance</div>
+        <div className="page-title" style={{ fontSize: 18, marginBottom: 12 }}>
+          Monthly performance
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 12 }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-            <span style={{ width: 14, height: 14, background: "#28a745", borderRadius: 4, display: "inline-block" }}></span>
+            <span style={{ width: 14, height: 14, background: "#28a745", borderRadius: 4, display: "inline-block" }} />
             Earnings
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-            <span style={{ width: 14, height: 14, background: "#0d6efd", borderRadius: 4, display: "inline-block" }}></span>
-            Bookings
+            <span style={{ width: 14, height: 14, background: "#0d6efd", borderRadius: 4, display: "inline-block" }} />
+            Payments
           </span>
         </div>
         <div
@@ -123,8 +169,8 @@ const OwnerEarnings = () => {
             return (
               <div key={label} style={{ display: "grid", gap: 6, gridTemplateRows: "1fr auto" }}>
                 <div style={{ display: "grid", gap: 6, alignItems: "end" }}>
-                  <div style={{ height: earnHeight || 4, background: "#28a745", borderRadius: 6 }} title={`₹${earningVal}`} />
-                  <div style={{ height: bookHeight || 4, background: "#0d6efd", borderRadius: 6 }} title={`${bookingVal} bookings`} />
+                  <div style={{ height: earnHeight || 4, background: "#28a745", borderRadius: 6 }} title={`Rs ${earningVal}`} />
+                  <div style={{ height: bookHeight || 4, background: "#0d6efd", borderRadius: 6 }} title={`${bookingVal} payments`} />
                 </div>
                 <div style={{ textAlign: "center", fontSize: 11, color: "#6c757d" }}>{label}</div>
               </div>
@@ -134,24 +180,28 @@ const OwnerEarnings = () => {
       </div>
 
       {earningsRows.length === 0 ? (
-        <div className="detail-card">No paid invoices yet.</div>
+        <div className="detail-card">No paid payments yet.</div>
       ) : (
         <div className="list-shell">
           <div className="list-grid">
             {pageItems.map((row) => (
-              <div key={row.invoice.id} className="list-card">
+              <div key={row.payment.id} className="list-card">
                 <div>
-                  <div className="equipment-name">{row.equipment?.name || "Equipment"}</div>
-                  <div className="list-meta">Invoice {row.invoice.id} • ₹{row.invoice.amount}</div>
+                  <div className="equipment-name">{row.equipment?.name || row.payment?.equipmentName || "Equipment"}</div>
+                  <div className="list-meta">Payment {row.payment.id} - Rs {row.payment.amount}</div>
                 </div>
                 <span className="status-pill status-paid">PAID</span>
               </div>
             ))}
           </div>
           <div className="messages-pagination">
-            <div className="page-info">Page {page} of {totalPages}</div>
+            <div className="page-info">
+              Page {page} of {totalPages}
+            </div>
             <div className="page-actions">
-              <button className="page-btn" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page === 1}>Prev</button>
+              <button className="page-btn" onClick={() => setPage((prev) => Math.max(1, prev - 1))} disabled={page === 1}>
+                Prev
+              </button>
               {visiblePages.map((pageNumber) => (
                 <button
                   key={pageNumber}
@@ -161,7 +211,9 @@ const OwnerEarnings = () => {
                   {pageNumber}
                 </button>
               ))}
-              <button className="page-btn" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={page === totalPages}>Next</button>
+              <button className="page-btn" onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))} disabled={page === totalPages}>
+                Next
+              </button>
             </div>
           </div>
         </div>

@@ -12,8 +12,8 @@
   --border: #E5E0D8;
   --danger: #E63946;
   --success: #2D6A4F;
-  --font-body: "Roboto", "Segoe UI", sans-serif;
-  --font-heading: "Montserrat", "Segoe UI", sans-serif;
+  --font-body: "Merienda", "Segoe UI", cursive;
+  --font-heading: "Merienda", "Segoe UI", cursive;
 }
 
 * {
@@ -70,7 +70,7 @@ a {
 }
 .badge {
   border-radius: 20px;
-  font-family: 'Nunito', sans-serif;
+  font-family: var(--font-body);
   padding: 5px 12px;
 }
 .form-control:focus,
@@ -81,5 +81,5 @@ a {
 .table thead {
   background: var(--primary);
   color: white;
-  font-family: 'Nunito', sans-serif;
+  font-family: var(--font-body);
 }

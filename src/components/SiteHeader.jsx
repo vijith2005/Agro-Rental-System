@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { getStored, STORAGE_KEYS } from "../utils/storage";
-import { readStoredUser } from "../utils/authApi";
+import { getCurrentUser } from "../utils/session";
 
 const SiteHeader = () => {
   const location = useLocation();
-  const currentUser = readStoredUser();
+  const currentUser = getCurrentUser();
 
   const role = currentUser?.role || "guest";
   const displayName = currentUser?.name || currentUser?.email?.split("@")[0] || "Guest";
@@ -57,7 +57,6 @@ const SiteHeader = () => {
     if (role === "delivery") {
       return [
         { to: "/delivery", label: "Dashboard" },
-        { to: "/delivery/pickups", label: "Pickups" },
         { to: "/delivery/deliveries", label: "Deliveries" },
         { to: "/delivery/returns", label: "Returns" },
         { to: "/delivery/history", label: "History" },

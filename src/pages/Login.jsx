@@ -5,13 +5,10 @@ import { Container, Row, Col, Card, Form, Button, Alert, Spinner } from "react-b
 import "bootstrap/dist/css/bootstrap.min.css";
 import bgImage from "../assets/hero.jpg";
 import SiteFooter from "../components/SiteFooter";
-import { routeByRole } from "../utils/auth";
-import {
-  authApi,
-  authErrorMessage,
-  normalizeAuthUser,
-  storeAuthSession,
-} from "../utils/authApi";
+import { mapAuthUserToSessionUser, mergeProfileIntoUser, routeByRole } from "../utils/auth";
+import { loginUser } from "../api/authApi";
+import { ensureMyProfile } from "../api/profileApi";
+import { saveSession, syncCurrentUser, pushAuthHistory } from "../utils/session";
 
 const Tractor = () => <i className="bi bi-tractor fs-1"></i>;
 const Mail = () => <i className="bi bi-envelope"></i>;
@@ -48,27 +45,26 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const response = await authApi.post("/auth/login", {
-        email: formData.email.trim(),
-        password: formData.password,
-      });
+      const authResponse = await loginUser(formData);
+      const sessionUser = mapAuthUserToSessionUser(authResponse.user);
 
-      const normalizedUser = normalizeAuthUser(response.data?.user);
-      const token = response.data?.accessToken;
+      saveSession(sessionUser, authResponse.accessToken, rememberMe);
 
-      if (!normalizedUser || !token) {
-        throw new Error("Unexpected login response from the server");
+      try {
+        const profile = await ensureMyProfile(sessionUser);
+        syncCurrentUser(mergeProfileIntoUser(sessionUser, profile));
+      } catch (profileError) {
+        console.warn("Profile service sync skipped during login.", profileError);
       }
 
-      storeAuthSession(normalizedUser, token, rememberMe);
-
-      const history = JSON.parse(localStorage.getItem("authHistory")) || [];
-      history.push({ type: "LOGIN", at: new Date().toISOString() });
-      localStorage.setItem("authHistory", JSON.stringify(history));
-
-      navigate(routeByRole(normalizedUser.role));
-    } catch (err) {
-      setError(authErrorMessage(err, "Invalid email or password"));
+      pushAuthHistory("LOGIN", sessionUser);
+      navigate(routeByRole(sessionUser.role));
+    } catch (apiError) {
+      setError(
+        apiError?.response?.data?.message ||
+          apiError?.response?.data?.fieldErrors?.email ||
+          "Unable to sign in. Please check your credentials."
+      );
     } finally {
       setIsLoading(false);
     }

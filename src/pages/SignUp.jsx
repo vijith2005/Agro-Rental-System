@@ -5,14 +5,14 @@ import { Container, Row, Col, Card, Form, Button, Alert, Spinner } from "react-b
 import "bootstrap/dist/css/bootstrap.min.css";
 import bgImage from "../assets/hero.jpg";
 import SiteFooter from "../components/SiteFooter";
-import { routeByRole } from "../utils/auth";
 import {
-  authApi,
-  authErrorMessage,
-  normalizeAuthUser,
-  roleToApiRole,
-  storeAuthSession,
-} from "../utils/authApi";
+  mapAuthUserToSessionUser,
+  mergeProfileIntoUser,
+  routeByRole,
+} from "../utils/auth";
+import { registerUser } from "../api/authApi";
+import { ensureMyProfile, syncMyProfile } from "../api/profileApi";
+import { pushAuthHistory, saveSession, syncCurrentUser } from "../utils/session";
 
 const Tractor = () => <i className="bi bi-tractor fs-1"></i>;
 const Mail = () => <i className="bi bi-envelope"></i>;
@@ -78,26 +78,29 @@ export default function SignUpPage() {
     }
 
     setIsLoading(true);
+
     try {
-      const response = await authApi.post("/auth/register", {
-        name: formData.name.trim(),
-        email: formData.email.trim().toLowerCase(),
-        phone: formData.phone.trim(),
-        password: formData.password,
-        role: roleToApiRole(formData.role),
-      });
+      const authResponse = await registerUser(formData);
+      const sessionUser = mapAuthUserToSessionUser(authResponse.user);
 
-      const normalizedUser = normalizeAuthUser(response.data?.user);
-      const token = response.data?.accessToken;
+      saveSession(sessionUser, authResponse.accessToken, true);
 
-      if (!normalizedUser || !token) {
-        throw new Error("Unexpected registration response from the server");
+      try {
+        await syncMyProfile(sessionUser);
+        const profile = await ensureMyProfile(sessionUser);
+        syncCurrentUser(mergeProfileIntoUser(sessionUser, profile));
+      } catch (profileError) {
+        console.warn("Profile service sync skipped during signup.", profileError);
       }
 
-      storeAuthSession(normalizedUser, token, false);
-      navigate(routeByRole(normalizedUser.role));
-    } catch (err) {
-      setError(authErrorMessage(err, "Unable to create account"));
+      pushAuthHistory("REGISTER", sessionUser);
+      navigate(routeByRole(sessionUser.role));
+    } catch (apiError) {
+      setError(
+        apiError?.response?.data?.message ||
+          Object.values(apiError?.response?.data?.fieldErrors || {})[0] ||
+          "Unable to create account right now."
+      );
     } finally {
       setIsLoading(false);
     }

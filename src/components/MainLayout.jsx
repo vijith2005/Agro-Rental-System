@@ -1,10 +1,10 @@
 import React from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "./Sidebar";
-import { readStoredUser } from "../utils/authApi";
+import { getCurrentUser } from "../utils/session";
 
 const MainLayout = () => {
-  const user = readStoredUser();
+  const user = getCurrentUser();
 
   return (
     <div className="agr-shell">

@@ -2,13 +2,23 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
-import { getStored, STORAGE_KEYS } from "../../utils/storage";
+import { listEquipment } from "../../api/equipmentApi";
+import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
+import { EQUIPMENT_UPDATED_EVENT } from "../../utils/equipmentEvents";
 import heroImage from "../../assets/hero.jpg";
 import farmerImage from "../../assets/farmerbg.jpg";
 
 const imageMap = {
   hero: heroImage,
   farmer: farmerImage,
+};
+
+const isEquipmentAvailable = (item) => {
+  const status = (item?.status || "").toString().trim().toUpperCase();
+  if (status) {
+    return status === "AVAILABLE";
+  }
+  return item?.available !== false;
 };
 
 const categoriesList = ["All", "Tractor", "Harvester", "Sprayer", "Seeder", "Pump", "Cutter", "Other"];
@@ -22,26 +32,68 @@ const EquipmentBrowse = () => {
     maxPrice: "",
   });
   const [page, setPage] = useState(1);
+  const [equipments, setEquipments] = useState(() => getStored(STORAGE_KEYS.equipments, []));
+  const [isSyncing, setIsSyncing] = useState(true);
+  const [syncError, setSyncError] = useState("");
   const pageSize = 6;
 
-  const equipments = getStored(STORAGE_KEYS.equipments, []);
+  useEffect(() => {
+    let active = true;
+
+    const loadEquipment = async () => {
+      try {
+        const data = await listEquipment({ page: 0, size: 100 });
+        const content = data?.content || [];
+
+        if (!active) return;
+
+        setEquipments(content);
+        setStored(STORAGE_KEYS.equipments, content);
+        setSyncError("");
+      } catch {
+        if (active) {
+          setSyncError("Showing cached equipment because the backend is unavailable.");
+        }
+      } finally {
+        if (active) setIsSyncing(false);
+      }
+    };
+
+    loadEquipment();
+    const handleEquipmentUpdated = () => {
+      loadEquipment();
+    };
+
+    window.addEventListener(EQUIPMENT_UPDATED_EVENT, handleEquipmentUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener(EQUIPMENT_UPDATED_EVENT, handleEquipmentUpdated);
+    };
+  }, []);
+
   const locations = useMemo(
-    () => ["All", ...new Set(equipments.map((item) => item.location))],
+    () => ["All", ...new Set(equipments.map((item) => item.location).filter(Boolean))],
     [equipments]
   );
 
   const filtered = useMemo(() => {
     const term = filters.search.toLowerCase();
+
     return equipments.filter((item) => {
-      const matchesSearch =
-        item.name.toLowerCase().includes(term) ||
-        item.category.toLowerCase().includes(term) ||
-        item.location.toLowerCase().includes(term);
+      if (!isEquipmentAvailable(item)) {
+        return false;
+      }
+
+      const name = (item.name || "").toLowerCase();
+      const category = (item.category || "").toLowerCase();
+      const location = (item.location || "").toLowerCase();
+      const matchesSearch = name.includes(term) || category.includes(term) || location.includes(term);
       const matchesCategory = filters.category === "All" || item.category === filters.category;
       const matchesLocation = filters.location === "All" || item.location === filters.location;
-      const price = item.day || 0;
+      const price = Number(item.day || 0);
       const matchesMin = filters.minPrice ? price >= Number(filters.minPrice) : true;
       const matchesMax = filters.maxPrice ? price <= Number(filters.maxPrice) : true;
+
       return matchesSearch && matchesCategory && matchesLocation && matchesMin && matchesMax;
     });
   }, [equipments, filters]);
@@ -53,6 +105,10 @@ const EquipmentBrowse = () => {
     setPage(1);
   }, [filters]);
 
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
+
   const updateFilter = (key, value) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
@@ -60,6 +116,7 @@ const EquipmentBrowse = () => {
   const renderStars = (ratingValue) => {
     const rating = Number(ratingValue) || 0;
     const full = Math.round(rating);
+
     return Array.from({ length: 5 }).map((_, idx) => (
       <span key={idx} className={idx < full ? "star filled" : "star"}>
         ★
@@ -69,18 +126,28 @@ const EquipmentBrowse = () => {
 
   return (
     <div className="agr-page">
-      {/* Page header */}
-      <div className="equipment-hero card shadow-sm mb-4" style={{ backgroundImage: `linear-gradient(135deg, rgba(27,67,50,0.92), rgba(64,145,108,0.85)), url(${heroImage})` }}>
+      <div
+        className="equipment-hero card shadow-sm mb-4"
+        style={{
+          backgroundImage: `linear-gradient(135deg, rgba(27,67,50,0.92), rgba(64,145,108,0.85)), url(${heroImage})`,
+        }}
+      >
         <div className="equipment-hero-body">
           <p className="eyebrow text-uppercase text-light mb-2">Equipment Marketplace</p>
-          <h2 className="text-white mb-2" style={{ fontFamily: "Playfair Display, serif" }}>
+          <h2 className="text-white mb-2" style={{ fontFamily: "Merienda, cursive" }}>
             Find the right machine for your next job
           </h2>
           <p className="text-light mb-0">Browse, filter, and book in a few clicks.</p>
         </div>
       </div>
 
-      {/* Filters */}
+      {syncError && equipments.length === 0 && (
+        <div className="alert alert-warning mb-4">{syncError}</div>
+      )}
+      {isSyncing && equipments.length === 0 && (
+        <div className="alert alert-info mb-4">Loading equipment catalog...</div>
+      )}
+
       <div className="card p-3 mb-4">
         <div className="row g-3 align-items-end">
           <div className="col-md-3">
@@ -121,7 +188,7 @@ const EquipmentBrowse = () => {
             </select>
           </div>
           <div className="col-md-2">
-            <label className="form-label">Min Price (₹/day)</label>
+            <label className="form-label">Min Price (Rs/day)</label>
             <input
               type="number"
               className="form-control"
@@ -131,7 +198,7 @@ const EquipmentBrowse = () => {
             />
           </div>
           <div className="col-md-2">
-            <label className="form-label">Max Price (₹/day)</label>
+            <label className="form-label">Max Price (Rs/day)</label>
             <input
               type="number"
               className="form-control"
@@ -141,14 +208,24 @@ const EquipmentBrowse = () => {
             />
           </div>
           <div className="col-md-1 d-grid">
-            <button className="btn btn-warning" onClick={() => setFilters({ search: "", category: "All", location: "All", minPrice: "", maxPrice: "" })}>
+            <button
+              className="btn btn-warning"
+              onClick={() =>
+                setFilters({
+                  search: "",
+                  category: "All",
+                  location: "All",
+                  minPrice: "",
+                  maxPrice: "",
+                })
+              }
+            >
               Clear
             </button>
           </div>
         </div>
       </div>
 
-      {/* Cards grid */}
       <div className="row g-4">
         {pageItems.map((item) => (
           <div className="col-lg-4 col-md-6" key={item.id}>
@@ -159,25 +236,30 @@ const EquipmentBrowse = () => {
               />
               <div className="card-body">
                 <div className="d-flex justify-content-between align-items-start mb-2">
-                  <h5 className="card-title mb-0" style={{ fontFamily: "Playfair Display, serif", color: "var(--primary)" }}>
+                  <h5
+                    className="card-title mb-0"
+                    style={{ fontFamily: "Merienda, cursive", color: "var(--primary)" }}
+                  >
                     {item.name}
                   </h5>
                   <span className="badge bg-light text-primary border">{item.category}</span>
                 </div>
                 <p className="text-muted small mb-2">
-                  {item.ownerName} • {item.location}
+                  {item.ownerName || "Owner"} • {item.location}
                 </p>
                 <div className="d-flex align-items-center gap-2 mb-2">
                   <div className="rating">{renderStars(item.rating)}</div>
                   <span className="small text-muted">{(Number(item.rating) || 0).toFixed(1)}</span>
                 </div>
                 <div className="fw-bold mb-2" style={{ color: "var(--primary)" }}>
-                  ₹{item.day}/day
+                  Rs {item.day}/day
                 </div>
                 <div className="d-flex align-items-center gap-2 mb-3">
-                  <span className="badge bg-success">Available</span>
-                  <span className="badge bg-secondary">₹{item.week}/week</span>
-                  <span className="badge bg-secondary">₹{item.month}/month</span>
+                  <span className={`badge ${isEquipmentAvailable(item) ? "bg-success" : "bg-secondary"}`}>
+                    {isEquipmentAvailable(item) ? "Available" : "Booked"}
+                  </span>
+                  <span className="badge bg-secondary">Rs {item.week}/week</span>
+                  <span className="badge bg-secondary">Rs {item.month}/month</span>
                 </div>
                 <div className="d-grid gap-2">
                   <Link to={`/farmer/equipment/${item.id}`} className="btn btn-warning">
@@ -199,7 +281,6 @@ const EquipmentBrowse = () => {
         )}
       </div>
 
-      {/* Pagination */}
       <div className="d-flex justify-content-between align-items-center mt-4 flex-wrap gap-2">
         <div className="text-muted small">
           Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, filtered.length)} of {filtered.length}
@@ -207,15 +288,21 @@ const EquipmentBrowse = () => {
         <nav aria-label="Equipment pagination">
           <ul className="pagination mb-0">
             <li className={`page-item ${page === 1 ? "disabled" : ""}`}>
-              <button className="page-link" onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
+              <button className="page-link" onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                Prev
+              </button>
             </li>
             {Array.from({ length: totalPages }).map((_, idx) => (
               <li key={idx} className={`page-item ${page === idx + 1 ? "active" : ""}`}>
-                <button className="page-link" onClick={() => setPage(idx + 1)}>{idx + 1}</button>
+                <button className="page-link" onClick={() => setPage(idx + 1)}>
+                  {idx + 1}
+                </button>
               </li>
             ))}
             <li className={`page-item ${page === totalPages ? "disabled" : ""}`}>
-              <button className="page-link" onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>Next</button>
+              <button className="page-link" onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+                Next
+              </button>
             </li>
           </ul>
         </nav>

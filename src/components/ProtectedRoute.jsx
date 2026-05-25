@@ -1,11 +1,11 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 import { normalizeRole } from "../utils/auth";
-import { readStoredToken, readStoredUser } from "../utils/authApi";
+import { getAuthToken, getCurrentUser } from "../utils/session";
 
 const ProtectedRoute = ({ children, role }) => {
-  const user = readStoredUser();
-  const token = readStoredToken();
+  const user = getCurrentUser();
+  const token = getAuthToken();
 
   if (!user || !token) {
     return <Navigate to="/login" />;
