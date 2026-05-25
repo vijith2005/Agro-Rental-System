@@ -93,7 +93,7 @@ export default function SignUpPage() {
         console.warn("Profile service sync skipped during signup.", profileError);
       }
 
-      pushAuthHistory("REGISTER");
+      pushAuthHistory("REGISTER", sessionUser);
       navigate(routeByRole(sessionUser.role));
     } catch (apiError) {
       setError(

@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import toast from "react-hot-toast";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
 import { createPayment, createRazorpayOrder, listPaymentsByFarmer } from "../../api/paymentApi";
@@ -8,7 +9,9 @@ import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
 import { getCurrentUser } from "../../utils/session";
 import { RENTAL_UPDATED_EVENT, notifyRentalUpdated } from "../../utils/rentalEvents";
 import { PAYMENT_UPDATED_EVENT, notifyPaymentUpdated } from "../../utils/paymentEvents";
-import { openRazorpayCheckout } from "../../utils/razorpay";
+import { buildRazorpayReceipt, openRazorpayCheckout } from "../../utils/razorpay";
+import PaginationControls from "../../components/PaginationControls";
+import { formatBookingDate } from "../../utils/bookingDates";
 
 const Payments = () => {
   const [rentals, setRentals] = useState([]);
@@ -16,19 +19,17 @@ const Payments = () => {
   const [showHistory, setShowHistory] = useState(true);
   const [payModal, setPayModal] = useState({ open: false, rental: null });
   const [loading, setLoading] = useState(false);
-  const [warnings, setWarnings] = useState([]);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
+  const backendNoticeShown = useRef({ rentals: false, payments: false });
+  const PAGE_SIZE = 5;
 
   const farmerKey = getCurrentUser()?.email || "farmer@demo.com";
   const farmerName = getCurrentUser()?.name || "Farmer";
   const razorpayKeyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
 
-  const appendWarning = (warning) => {
-    setWarnings((current) => (current.includes(warning) ? current : [...current, warning]));
-  };
-
   useEffect(() => {
     let active = true;
-    setWarnings([]);
 
     const loadRentals = async () => {
       try {
@@ -37,10 +38,14 @@ const Payments = () => {
         const content = Array.isArray(data) ? data : [];
         setRentals(content);
         setStored(STORAGE_KEYS.rentals, content);
+        backendNoticeShown.current.rentals = false;
       } catch {
         if (!active) return;
         setRentals(getStored(STORAGE_KEYS.rentals, []));
-        appendWarning("Using cached rentals because the backend is unavailable.");
+        if (!backendNoticeShown.current.rentals) {
+          toast.error("Using cached rentals because the backend is unavailable.");
+          backendNoticeShown.current.rentals = true;
+        }
       }
     };
 
@@ -51,14 +56,16 @@ const Payments = () => {
         const content = Array.isArray(data) ? data : [];
         setPayments(content);
         setStored(STORAGE_KEYS.payments, content);
+        backendNoticeShown.current.payments = false;
       } catch {
         if (!active) return;
         const cached = getStored(STORAGE_KEYS.payments, []).filter(
           (payment) => !payment.farmerId || payment.farmerId === farmerKey
         );
         setPayments(cached);
-        if (cached.length === 0) {
-          appendWarning("Using cached payments because the backend is unavailable.");
+        if (!backendNoticeShown.current.payments) {
+          toast.error("Using cached payments because the backend is unavailable.");
+          backendNoticeShown.current.payments = true;
         }
       }
     };
@@ -99,6 +106,13 @@ const Payments = () => {
     [activeRentals, history]
   );
   const pendingPayments = activeWithPaymentState;
+  const pendingTotalPages = Math.max(1, Math.ceil(pendingPayments.length / PAGE_SIZE));
+  const pagedPendingPayments = pendingPayments.slice(
+    (pendingPage - 1) * PAGE_SIZE,
+    pendingPage * PAGE_SIZE
+  );
+  const historyTotalPages = Math.max(1, Math.ceil(history.length / PAGE_SIZE));
+  const pagedHistory = history.slice((historyPage - 1) * PAGE_SIZE, historyPage * PAGE_SIZE);
 
   const summary = useMemo(() => {
     const totalPaid = history.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
@@ -115,6 +129,14 @@ const Payments = () => {
       totalRefunded,
     };
   }, [history, pendingPayments, payments]);
+
+  useEffect(() => {
+    setPendingPage((currentPage) => Math.min(currentPage, pendingTotalPages));
+  }, [pendingTotalPages]);
+
+  useEffect(() => {
+    setHistoryPage((currentPage) => Math.min(currentPage, historyTotalPages));
+  }, [historyTotalPages]);
 
   const openPayModal = (rental) => {
     setPayModal({ open: true, rental });
@@ -206,45 +228,50 @@ const Payments = () => {
 
     try {
       const description = `${rental.equipmentName || "Equipment"} rental payment`;
-      let order = null;
-
       try {
-        order = await createRazorpayOrder({
-          amount: Number(rental.totalAmount || 0),
-          receipt: `rcpt-${rental.id}-${Date.now()}`,
+        const order = await createRazorpayOrder({
+          amount: Math.round(Number(rental.totalAmount || 0)),
+          receipt: buildRazorpayReceipt(rental.id || rental.equipmentId || "rental"),
           description,
         });
-      } catch (orderError) {
-        console.warn("Razorpay order creation failed. Falling back to direct checkout.", orderError);
+
+        const response = await openRazorpayCheckout({
+          key: order?.keyId || razorpayKeyId,
+          amountInSubunits: order?.amount,
+          currency: order?.currency || "INR",
+          orderId: order?.id,
+          name: "AgroConnect",
+          description,
+          prefill: {
+            name: currentUser?.name || farmerName,
+            email: currentUser?.email || farmerKey,
+            contact: currentUser?.phone || "",
+          },
+          notes: {
+            rentalId: rental.id || "",
+            equipmentId: rental.equipmentId || "",
+            equipmentName: rental.equipmentName || "",
+          },
+        });
+
+        await markAsPaid(rental, "Razorpay", {
+          gateway: "Razorpay",
+          transactionId: response.razorpay_payment_id,
+          receiptNumber: order?.receipt || response.razorpay_order_id || `rcpt-${Date.now()}`,
+          note: "Paid via Razorpay test mode",
+        });
+        toast.success("Payment completed successfully.");
+      } catch (checkoutError) {
+        if (checkoutError?.code === "RAZORPAY_CANCELLED") {
+          toast("Payment was cancelled.");
+        } else {
+          console.warn("Razorpay checkout failed.", checkoutError);
+          toast.error(getApiErrorMessage(checkoutError, "Unable to complete the Razorpay checkout."));
+        }
       }
-
-      const response = await openRazorpayCheckout({
-        key: razorpayKeyId,
-        amount: Number(rental.totalAmount || 0),
-        orderId: order?.id,
-        name: "AgroConnect",
-        description,
-        prefill: {
-          name: currentUser?.name || farmerName,
-          email: currentUser?.email || farmerKey,
-          contact: currentUser?.phone || "",
-        },
-        notes: {
-          rentalId: rental.id || "",
-          equipmentId: rental.equipmentId || "",
-          equipmentName: rental.equipmentName || "",
-        },
-      });
-
-      await markAsPaid(rental, "Razorpay", {
-        gateway: "Razorpay",
-        transactionId: response.razorpay_payment_id,
-        receiptNumber: response.razorpay_order_id || order?.id || `rcpt-${Date.now()}`,
-        note: "Paid via Razorpay test mode",
-      });
       closePayModal();
     } catch (error) {
-      appendWarning(getApiErrorMessage(error, "Unable to complete the Razorpay checkout."));
+      toast.error(getApiErrorMessage(error, "Unable to complete the Razorpay checkout."));
     } finally {
       setLoading(false);
     }
@@ -263,9 +290,11 @@ const Payments = () => {
             <h2 className="agr-h1 mb-1">Payments</h2>
             <p className="text-muted mb-0">Complete pending rental payments and review history.</p>
           </div>
-          <button className="btn btn-outline-primary btn-sm" onClick={() => setShowHistory((s) => !s)}>
-            {showHistory ? "Hide History" : "Show History"}
-          </button>
+          <div className="d-flex flex-column align-items-end gap-2">
+            <button className="btn btn-outline-primary btn-sm" onClick={() => setShowHistory((s) => !s)}>
+              {showHistory ? "Hide History" : "Show History"}
+            </button>
+          </div>
         </div>
 
         <div className="row g-3">
@@ -294,11 +323,11 @@ const Payments = () => {
         <div className="card-header bg-white">
           <div className="d-flex justify-content-between align-items-center">
             <h5 className="mb-0">Pending Payments</h5>
-            <span className="badge bg-warning text-dark">
-              {pendingPayments.filter((inv) => !inv.hasPaidPayment).length} due
-            </span>
+              <span className="badge bg-warning text-dark">
+                {pendingPayments.filter((inv) => !inv.hasPaidPayment).length} due
+              </span>
+            </div>
           </div>
-        </div>
         <div className="table-responsive">
           <table className="table align-middle mb-0" style={{ minWidth: 980 }}>
             <thead>
@@ -318,7 +347,7 @@ const Payments = () => {
                   </td>
                 </tr>
               )}
-              {pendingPayments.map((inv) => (
+              {pagedPendingPayments.map((inv) => (
                 <tr key={inv.id}>
                   <td>{pendingPayments.findIndex((item) => item.id === inv.id) + 1}</td>
                   <td>{inv.equipmentName || "Equipment"}</td>
@@ -343,6 +372,16 @@ const Payments = () => {
               ))}
             </tbody>
           </table>
+        </div>
+        <div className="px-3 pb-3">
+          <PaginationControls
+            currentPage={pendingPage}
+            totalPages={pendingTotalPages}
+            totalItems={pendingPayments.length}
+            pageSize={PAGE_SIZE}
+            itemLabel="payments"
+            onPageChange={setPendingPage}
+          />
         </div>
       </div>
 
@@ -371,9 +410,9 @@ const Payments = () => {
                     </td>
                   </tr>
                 )}
-                {history.map((inv) => (
+                {pagedHistory.map((inv) => (
                   <tr key={inv.id}>
-                    <td>{inv.paidAt || "N/A"}</td>
+                    <td>{formatBookingDate(inv.paidAt || inv.createdAt) || "N/A"}</td>
                     <td>{history.findIndex((item) => item.id === inv.id) + 1}</td>
                     <td>{inv.equipmentName || "Equipment"}</td>
                     <td className="fw-bold">Rs {inv.amount || 0}</td>
@@ -385,6 +424,16 @@ const Payments = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="px-3 pb-3">
+            <PaginationControls
+              currentPage={historyPage}
+              totalPages={historyTotalPages}
+              totalItems={history.length}
+              pageSize={PAGE_SIZE}
+              itemLabel="payments"
+              onPageChange={setHistoryPage}
+            />
           </div>
         </div>
       )}

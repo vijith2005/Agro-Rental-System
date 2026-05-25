@@ -8,6 +8,7 @@ import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
 import { getCurrentUser } from "../../utils/session";
 import { EQUIPMENT_UPDATED_EVENT } from "../../utils/equipmentEvents";
 import { RENTAL_UPDATED_EVENT } from "../../utils/rentalEvents";
+import { mergeRentalsById } from "../../utils/rentalCache";
 
 const FarmDashboard = () => {
   const [displayName, setDisplayName] = useState("Farmer");
@@ -61,16 +62,19 @@ const FarmDashboard = () => {
     const loadRentals = async () => {
       const currentUser = getCurrentUser();
       const farmerId = currentUser?.email || "farmer@demo.com";
+      const cached = getStored(STORAGE_KEYS.rentals, []).filter(
+        (rental) => (rental.farmerId || "").toLowerCase() === farmerId.toLowerCase()
+      );
 
       try {
         const data = await listRentalsByFarmer(farmerId);
-        const content = Array.isArray(data) ? data : [];
+        const content = mergeRentalsById(Array.isArray(data) ? data : [], cached);
         if (!active) return;
         setRentals(content);
         setStored(STORAGE_KEYS.rentals, content);
       } catch {
         if (!active) return;
-        setRentals(getStored(STORAGE_KEYS.rentals, []));
+        setRentals(cached);
       }
     };
 
@@ -91,7 +95,9 @@ const FarmDashboard = () => {
         label: "Active rentals",
       },
       {
-        value: rentals.filter((item) => ["REQUESTED", "APPROVED", "SCHEDULED"].includes((item.status || "").toUpperCase())).length.toString(),
+        value: rentals
+          .filter((item) => ["REQUESTED", "PENDING", "APPROVED", "SCHEDULED"].includes((item.status || "").toUpperCase()))
+          .length.toString(),
         label: "Active bookings",
       },
     ],
@@ -99,11 +105,10 @@ const FarmDashboard = () => {
   );
 
   const quickActions = [
-    { title: "Explore Equipment", subtitle: "Browse premium machinery", icon: "↗", tone: "mint", link: "/farmer/equipment" },
+    { title: "Explore Equipment", subtitle: "Browse premium machinery", icon: "→", tone: "mint", link: "/farmer/equipment" },
     { title: "My Bookings", subtitle: "Track your rentals", icon: "✓", tone: "sky", link: "/farmer/bookings" },
     { title: "Transactions", subtitle: "View payment history", icon: "₹", tone: "lavender", link: "/farmer/payments" },
     { title: "Messages", subtitle: "Chat with owners", icon: "✉", tone: "rose", link: "/farmer/messages" },
-    { title: "Support", subtitle: "We’re here to help", icon: "?", tone: "teal", link: "/farmer" },
     { title: "Profile", subtitle: "Manage your details", icon: "⚙", tone: "amber", link: "/profile" },
   ];
 
@@ -170,7 +175,7 @@ const FarmDashboard = () => {
               <h3 className="section-title">Featured Equipment</h3>
               <p className="section-subtitle">Top-rated agricultural machinery in your area</p>
             </div>
-            <Link to="/farmer/equipment" className="view-all">
+            <Link to="/farmer/equipment" className="view-all text-success">
               View All Equipment →
             </Link>
           </div>

@@ -1,11 +1,7 @@
 import React from "react";
 import { Outlet } from "react-router-dom";
 import Sidebar from "./Sidebar";
-
-const getCurrentUser = () =>
-  JSON.parse(localStorage.getItem("currentUser")) ||
-  JSON.parse(sessionStorage.getItem("currentUser")) ||
-  null;
+import { getCurrentUser } from "../utils/session";
 
 const MainLayout = () => {
   const user = getCurrentUser();

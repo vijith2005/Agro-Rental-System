@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Col, Form, Modal, Row, Spinner, Table } from "react-bootstrap";
+import { Alert, Badge, Button, Col, Form, ListGroup, Modal, Row, Spinner } from "react-bootstrap";
 import { changeMyPassword, getMyAuthUser, updateMyAuthUser } from "../api/authApi";
 import { getApiErrorMessage } from "../api/http";
+import { listRentalsByFarmer } from "../api/rentalApi";
 import {
   ensureMyProfile,
   syncMyProfile,
@@ -35,22 +36,6 @@ const buildProfileState = (user) => ({
   status: user?.status || "",
 });
 
-const activityLabel = (item) => item.type || item.action || "LOGIN";
-
-const activityTime = (item) => {
-  const value = item.at || item.createdAt || item.time;
-  if (!value) return "--";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? String(value)
-    : parsed.toLocaleString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-};
-
 const roleAccent = (role) => {
   if (role === "owner") return "warning";
   if (role === "delivery") return "info";
@@ -69,21 +54,58 @@ const Profile = () => {
     next: "",
     confirm: "",
   });
-  const [activity, setActivity] = useState([]);
-  const [activityPage, setActivityPage] = useState(1);
+  const [ongoingProducts, setOngoingProducts] = useState([]);
   const [isBootstrapping, setIsBootstrapping] = useState(Boolean(cachedUser));
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   useEffect(() => {
-    try {
-      const history = JSON.parse(localStorage.getItem("authHistory")) || [];
-      setActivity(history.slice().reverse());
-    } catch {
-      setActivity([]);
-    }
-  }, []);
+    let isActive = true;
+
+    const loadProfile = async () => {
+      if (!cachedUser) {
+        setIsBootstrapping(false);
+        return;
+      }
+
+      try {
+        const authUser = await getMyAuthUser();
+        const sessionUser = mapAuthUserToSessionUser(authUser);
+        const remoteProfile = await ensureMyProfile(sessionUser);
+        const mergedUser = mergeProfileIntoUser(sessionUser, remoteProfile);
+
+        if (!isActive) {
+          return;
+        }
+
+        syncCurrentUser(mergedUser);
+        setProfile(buildProfileState(mergedUser));
+      } catch (error) {
+        if (!isActive) {
+          return;
+        }
+
+        setMessage({
+          variant: "warning",
+          text: getApiErrorMessage(
+            error,
+            "Unable to load the latest profile details. Showing the saved session data instead."
+          ),
+        });
+      } finally {
+        if (isActive) {
+          setIsBootstrapping(false);
+        }
+      }
+    };
+
+    loadProfile();
+
+    return () => {
+      isActive = false;
+    };
+  }, [cachedUser]);
 
   useEffect(() => {
     setActivityPage((currentPage) => {
@@ -150,28 +172,48 @@ const Profile = () => {
   }, [profile.email, profile.name]);
 
   const isFarmer = profile.role === "farmer";
-  const activityPageCount = Math.max(1, Math.ceil(activity.length / ACTIVITY_PAGE_SIZE));
-  const activityPageDots = useMemo(() => {
-    if (activityPageCount <= 3) {
-      return Array.from({ length: activityPageCount }, (_, index) => index + 1);
-    }
+  const activity = [];
+  const activityPage = 1;
+  const activityPageCount = 1;
+  const activityPageDots = [];
+  const activityStart = 0;
+  const activityEnd = 0;
+  const setActivityPage = () => {};
 
-    if (activityPage === 1) {
-      return [1, 2, 3];
-    }
+  useEffect(() => {
+    let isActive = true;
 
-    if (activityPage === activityPageCount) {
-      return [activityPageCount - 2, activityPageCount - 1, activityPageCount];
-    }
+    const loadOngoingProducts = async () => {
+      if (!cachedUser?.email || profile.role !== "farmer") {
+        if (isActive) setOngoingProducts([]);
+        return;
+      }
 
-    return [activityPage - 1, activityPage, activityPage + 1];
-  }, [activityPage, activityPageCount]);
-  const pagedActivity = useMemo(() => {
-    const start = (activityPage - 1) * ACTIVITY_PAGE_SIZE;
-    return activity.slice(start, start + ACTIVITY_PAGE_SIZE);
-  }, [activity, activityPage]);
-  const activityStart = activity.length === 0 ? 0 : (activityPage - 1) * ACTIVITY_PAGE_SIZE + 1;
-  const activityEnd = Math.min(activityPage * ACTIVITY_PAGE_SIZE, activity.length);
+      try {
+        const rentals = await listRentalsByFarmer(cachedUser.email);
+        if (!isActive) return;
+
+        const activeProducts = (Array.isArray(rentals) ? rentals : [])
+          .filter(
+            (rental) =>
+              !["CANCELLED", "COMPLETED", "REFUNDED", "RETURNED"].includes(
+                (rental.status || "").toUpperCase()
+              )
+          )
+          .map((rental) => rental.equipmentName || "Product");
+
+        setOngoingProducts(activeProducts);
+      } catch {
+        if (isActive) setOngoingProducts([]);
+      }
+    };
+
+    loadOngoingProducts();
+
+    return () => {
+      isActive = false;
+    };
+  }, [cachedUser?.email, profile.role]);
 
   const handleProfileChange = (event) => {
     const { name, value } = event.target;
@@ -489,41 +531,26 @@ const Profile = () => {
           <div className="agr-panel profile-activity-panel">
             <div className="d-flex align-items-center justify-content-between gap-3 mb-4">
               <div className="profile-activity-header">
-                <h5 className="mb-1">Activity Log</h5>
-                <p className="text-muted mb-0">Recent account activity from this browser session.</p>
+                <h5 className="mb-1">Ongoing Rented Products</h5>
+                <p className="text-muted mb-0">Current products rented by this farmer.</p>
               </div>
               <Badge bg="secondary" className="px-3 py-2">
-                {activity.length} entries
+                {ongoingProducts.length} products
               </Badge>
             </div>
-            <Table responsive hover className="mb-0 profile-activity-table">
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Time</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pagedActivity.length > 0 ? (
-                  pagedActivity.map((item, index) => (
-                    <tr key={`${item.at || item.time || index}-${index}`}>
-                      <td>{activityLabel(item)}</td>
-                      <td>{activityTime(item)}</td>
-                      <td>
-                        <Badge bg="success">RECORDED</Badge>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={3} className="text-muted">
-                      No recent activity yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </Table>
+            <ListGroup variant="flush">
+              {isFarmer && ongoingProducts.length > 0 ? (
+                ongoingProducts.map((productName, index) => (
+                  <ListGroup.Item key={`${productName}-${index}`} className="px-0">
+                    {productName}
+                  </ListGroup.Item>
+                ))
+              ) : (
+                <ListGroup.Item className="px-0 text-muted border-0">
+                  {isFarmer ? "No ongoing rented products." : "This section is available for farmer accounts only."}
+                </ListGroup.Item>
+              )}
+            </ListGroup>
             {activity.length > 0 ? (
               <div className="activity-pagination mt-4">
                 <button

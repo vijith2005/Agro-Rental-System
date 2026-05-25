@@ -1,13 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
+import PaginationControls from "../../components/PaginationControls";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
 import { listEquipment } from "../../api/equipmentApi";
 import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
 import { EQUIPMENT_UPDATED_EVENT } from "../../utils/equipmentEvents";
 
+const PAGE_SIZE = 6;
+
 const AdminEquipment = () => {
   const [items, setItems] = useState(() => getStored(STORAGE_KEYS.equipments, []));
   const [loadError, setLoadError] = useState("");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let active = true;
@@ -50,6 +54,13 @@ const AdminEquipment = () => {
     [items]
   );
 
+  const totalPages = Math.max(1, Math.ceil(mappedItems.length / PAGE_SIZE));
+  const pageItems = mappedItems.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, totalPages));
+  }, [totalPages]);
+
   return (
     <div className="agr-page admin-dashboard motion-page">
       <div className="page-header">
@@ -63,7 +74,7 @@ const AdminEquipment = () => {
 
       <div className="list-shell">
         <div className="list-grid">
-          {mappedItems.map((item) => (
+          {pageItems.map((item) => (
             <div key={item.id} className="list-card">
               <div>
                 <div className="equipment-name">{item.name}</div>
@@ -85,6 +96,14 @@ const AdminEquipment = () => {
             </div>
           ))}
         </div>
+        <PaginationControls
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={mappedItems.length}
+          pageSize={PAGE_SIZE}
+          itemLabel="equipment items"
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

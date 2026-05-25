@@ -692,6 +692,45 @@
   color: inherit;
 }
 
+.owner-request-card {
+  align-items: flex-start;
+}
+
+.owner-request-copy {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.owner-request-date {
+  line-height: 1.5;
+}
+
+.owner-request-actions {
+  flex: 1 1 340px;
+  min-width: 0;
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 10px 12px;
+}
+
+.owner-request-actions .status-pill {
+  max-width: 180px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.owner-request-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px 12px;
+}
+
 .pagination {
   display: flex;
   align-items: center;
@@ -881,5 +920,13 @@
   }
   .split-card > div:last-child {
     justify-self: start;
+  }
+  .owner-request-card {
+    flex-direction: column;
+  }
+  .owner-request-actions,
+  .owner-request-buttons {
+    width: 100%;
+    justify-content: flex-start;
   }
 }

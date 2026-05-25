@@ -1,17 +1,28 @@
 import React, { useEffect, useState } from "react";
 import { Button, Card, Form, Table } from "react-bootstrap";
+import toast from "react-hot-toast";
+import PaginationControls from "../../components/PaginationControls";
 import "../../styles/FarmerDashboard.css";
-import { addDamageReport, listRentalsByAgent, updateRentalStatus } from "../../api/rentalApi";
+import { addDamageReport, listRentalsByAgent, sendRentalMessage, updateRentalStatus } from "../../api/rentalApi";
 import { getCurrentUser } from "../../utils/session";
 import { RENTAL_UPDATED_EVENT, notifyRentalUpdated } from "../../utils/rentalEvents";
+import { formatBookingRange } from "../../utils/bookingDates";
+import {
+  buildReturnPickupRequestText,
+  getFarmerDropLocation,
+} from "../../utils/rentalLocations";
+
+const PAGE_SIZE = 5;
 
 const DeliveryReturns = () => {
   const [rentals, setRentals] = useState([]);
   const [selectedId, setSelectedId] = useState("");
-  const [damageSeverity, setDamageSeverity] = useState("Minor");
+  const [damageSeverity, setDamageSeverity] = useState("None");
   const [damageNotes, setDamageNotes] = useState("");
   const [message, setMessage] = useState("");
+  const [page, setPage] = useState(1);
   const agentKey = getCurrentUser()?.email || "delivery@demo.com";
+  const normalizedAgentKey = agentKey.toString().trim().toLowerCase();
 
   useEffect(() => {
     let active = true;
@@ -37,12 +48,55 @@ const DeliveryReturns = () => {
     };
   }, [agentKey]);
 
-  const returnRows = rentals.filter((rental) => ["DELIVERED", "IN_USE", "RETURN_SCHEDULED", "SCHEDULED"].includes((rental.status || "").toUpperCase()));
+  const isReturnTaskAssignedToCurrentAgent = (rental) => {
+    const assignedAgent = (rental?.returnAgentId || rental?.agentId || "").toString().trim().toLowerCase();
+    return Boolean(assignedAgent) && assignedAgent === normalizedAgentKey;
+  };
+
+  const returnRows = rentals.filter((rental) =>
+    ["DELIVERED", "IN_USE", "RETURN_SCHEDULED", "SCHEDULED"].includes((rental.status || "").toUpperCase()) &&
+    isReturnTaskAssignedToCurrentAgent(rental)
+  );
+  const totalPages = Math.max(1, Math.ceil(returnRows.length / PAGE_SIZE));
+  const pageItems = returnRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    if (returnRows.length === 0) return;
+    setSelectedId((prev) => (returnRows.some((item) => item.id === prev) ? prev : returnRows[0].id));
+  }, [returnRows]);
+
+  const selectedRental = rentals.find((item) => item.id === selectedId) || null;
+
+  const requestReturnPickup = async () => {
+    if (!selectedRental) return;
+    try {
+      await sendRentalMessage({
+        rentalId: selectedRental.id,
+        text: buildReturnPickupRequestText(selectedRental),
+      });
+      const updated = await updateRentalStatus(selectedRental.id, {
+        status: "RETURN_SCHEDULED",
+        note: "Return pickup requested by delivery agent",
+      });
+      setRentals((prev) => prev.map((item) => (item.id === selectedId ? updated : item)));
+      notifyRentalUpdated();
+      toast.success("Return pickup request sent.");
+    } catch {
+      toast.error("Unable to send return pickup request.");
+    }
+  };
 
   const submitInspection = async () => {
     if (!selectedId) return;
     try {
-      if (damageNotes.trim()) {
+      const normalizedSeverity = damageSeverity.toLowerCase();
+      const hasDamage = normalizedSeverity !== "none";
+
+      if (hasDamage && damageNotes.trim()) {
         await addDamageReport(selectedId, {
           severity: damageSeverity,
           description: damageNotes,
@@ -50,18 +104,20 @@ const DeliveryReturns = () => {
         });
       }
       await updateRentalStatus(selectedId, {
-        status: damageSeverity.toLowerCase() === "severe" ? "DAMAGED" : "RETURNED",
-        note: damageNotes || "Return inspection completed",
+        status: normalizedSeverity === "severe" ? "DAMAGED" : "RETURNED",
+        note: damageNotes || (hasDamage ? "Return inspection completed with damage noted" : "Return inspection completed with no damage"),
       });
       setRentals((prev) =>
         prev.map((item) =>
-          item.id === selectedId ? { ...item, status: damageSeverity.toLowerCase() === "severe" ? "DAMAGED" : "RETURNED" } : item
+          item.id === selectedId ? { ...item, status: normalizedSeverity === "severe" ? "DAMAGED" : "RETURNED" } : item
         )
       );
       notifyRentalUpdated();
       setMessage("Return inspection submitted.");
+      toast.success("Return inspection submitted.");
     } catch {
       setMessage("Return inspection failed.");
+      toast.error("Return inspection failed.");
     }
   };
 
@@ -78,21 +134,23 @@ const DeliveryReturns = () => {
             <thead>
               <tr>
                 <th>Select</th>
-                <th>Rental</th>
+                <th>Booking Date</th>
                 <th>Equipment</th>
-                <th>Return Location</th>
+                <th>Owner</th>
+                <th>Farmer</th>
+                <th>Farmer Return Location</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              {returnRows.length === 0 && (
+              {pageItems.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="text-center text-muted py-4">
+                  <td colSpan="7" className="text-center text-muted py-4">
                     No returns scheduled.
                   </td>
                 </tr>
               )}
-              {returnRows.map((item) => (
+              {pageItems.map((item) => (
                 <tr key={item.id}>
                   <td>
                     <Form.Check
@@ -102,14 +160,24 @@ const DeliveryReturns = () => {
                       onChange={() => setSelectedId(item.id)}
                     />
                   </td>
-                  <td>{item.id}</td>
+                  <td>{formatBookingRange(item.startDate, item.endDate)}</td>
                   <td>{item.equipmentName}</td>
-                  <td>{item.schedule?.returnLocation || item.deliveryLocation || "N/A"}</td>
+                  <td>{item.ownerName || item.ownerId || "Owner"}</td>
+                  <td>{item.farmerName || item.farmerId || "Farmer"}</td>
+                  <td>{getFarmerDropLocation(item)}</td>
                   <td>{item.status}</td>
                 </tr>
               ))}
             </tbody>
           </Table>
+          <PaginationControls
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={returnRows.length}
+            pageSize={PAGE_SIZE}
+            itemLabel="returns"
+            onPageChange={setPage}
+          />
         </Card.Body>
       </Card>
 
@@ -120,6 +188,7 @@ const DeliveryReturns = () => {
             <Form.Group className="mb-2">
               <Form.Label>Severity</Form.Label>
               <Form.Select value={damageSeverity} onChange={(e) => setDamageSeverity(e.target.value)}>
+                <option value="None">None</option>
                 <option value="Minor">Minor</option>
                 <option value="Major">Major</option>
                 <option value="Severe">Severe</option>
@@ -127,11 +196,21 @@ const DeliveryReturns = () => {
             </Form.Group>
             <Form.Group className="mb-2">
               <Form.Label>Damage notes</Form.Label>
-              <Form.Control type="text" placeholder="Optional" value={damageNotes} onChange={(e) => setDamageNotes(e.target.value)} />
+              <Form.Control
+                type="text"
+                placeholder="Optional"
+                value={damageNotes}
+                onChange={(e) => setDamageNotes(e.target.value)}
+              />
             </Form.Group>
-            <Button variant="outline-success" className="w-100" onClick={submitInspection}>
-              Submit Inspection
-            </Button>
+            <div className="d-flex gap-2">
+              <Button variant="outline-warning" className="w-50" type="button" onClick={requestReturnPickup} disabled={!selectedRental}>
+                Request Return Pickup
+              </Button>
+              <Button variant="outline-success" className="w-50" type="button" onClick={submitInspection} disabled={!selectedRental}>
+                Submit Inspection
+              </Button>
+            </div>
           </Form>
         </Card.Body>
       </Card>

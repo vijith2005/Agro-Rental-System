@@ -1,13 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { Badge, Card, Table } from "react-bootstrap";
+import PaginationControls from "../../components/PaginationControls";
 import "../../styles/FarmerDashboard.css";
 import { listRentalsByAgent } from "../../api/rentalApi";
 import { getCurrentUser } from "../../utils/session";
 import { RENTAL_UPDATED_EVENT } from "../../utils/rentalEvents";
+import { formatBookingRange } from "../../utils/bookingDates";
+
+const PAGE_SIZE = 6;
 
 const DeliveryHistory = () => {
   const [rentals, setRentals] = useState([]);
   const [message, setMessage] = useState("");
+  const [page, setPage] = useState(1);
   const agentKey = getCurrentUser()?.email || "delivery@demo.com";
 
   useEffect(() => {
@@ -33,6 +38,12 @@ const DeliveryHistory = () => {
   }, [agentKey]);
 
   const historyRows = rentals.filter((rental) => ["DELIVERED", "RETURNED", "COMPLETED", "DAMAGED"].includes((rental.status || "").toUpperCase()));
+  const totalPages = Math.max(1, Math.ceil(historyRows.length / PAGE_SIZE));
+  const pageItems = historyRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, totalPages));
+  }, [totalPages]);
 
   return (
     <div className="agr-page delivery-dashboard motion-page">
@@ -46,24 +57,28 @@ const DeliveryHistory = () => {
           <Table responsive className="delivery-table mt-3">
             <thead>
               <tr>
-                <th>Rental</th>
+                <th>Booking Date</th>
                 <th>Equipment</th>
+                <th>Owner</th>
+                <th>Farmer</th>
                 <th>Status</th>
                 <th>Date</th>
               </tr>
             </thead>
             <tbody>
-              {historyRows.length === 0 && (
+              {pageItems.length === 0 && (
                 <tr>
-                  <td colSpan="4" className="text-center text-muted py-4">
+                  <td colSpan="6" className="text-center text-muted py-4">
                     No completed deliveries yet.
                   </td>
                 </tr>
               )}
-              {historyRows.map((item) => (
+              {pageItems.map((item) => (
                 <tr key={item.id}>
-                  <td>{item.id}</td>
+                  <td>{formatBookingRange(item.startDate, item.endDate)}</td>
                   <td>{item.equipmentName}</td>
+                  <td>{item.ownerName || item.ownerId || "Owner"}</td>
+                  <td>{item.farmerName || item.farmerId || "Farmer"}</td>
                   <td>
                     <Badge bg={(item.status || "").toUpperCase() === "DAMAGED" ? "danger" : "success"}>
                       {item.status}
@@ -71,9 +86,17 @@ const DeliveryHistory = () => {
                   </td>
                   <td>{item.updatedAt || item.createdAt || "N/A"}</td>
                 </tr>
-              ))}
+                ))}
             </tbody>
           </Table>
+          <PaginationControls
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={historyRows.length}
+            pageSize={PAGE_SIZE}
+            itemLabel="deliveries"
+            onPageChange={setPage}
+          />
         </Card.Body>
       </Card>
     </div>

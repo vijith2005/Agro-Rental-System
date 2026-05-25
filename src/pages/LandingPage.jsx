@@ -62,13 +62,13 @@ export default function LandingPage() {
     },
     {
       step: '03',
-      title: 'Book & Track',
-      description: 'Request bookings and track deliveries in real-time',
+      title: 'Book the Equipment',
+      description: 'Request bookings and get instant notifications on status updates',
     },
     {
       step: '04',
-      title: 'Complete & Review',
-      description: 'Finish rental period and leave feedback for the community',
+      title: 'Message with the Each Other ',
+      description: 'Fell free to ask you queries to each other ',
     },
   ];
 
@@ -145,97 +145,97 @@ export default function LandingPage() {
   return (
     <div className="overflow-hidden">
   
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800;900&family=Merriweather:wght@300;400;700;900&family=Source+Serif+Pro:wght@300;400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" />
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Merienda:wght@400;500;600;700;800&display=swap" />
    
       <style jsx>{`
         body {
-          font-family: 'Inter', sans-serif;
+          font-family: 'Merienda', cursive;
         }
         
         h1, h2, h3, h4, h5, h6 {
-          font-family: 'Playfair Display', serif;
-          font-weight: 800;
-          letter-spacing: -0.02em;
+          font-family: 'Merienda', cursive;
+          font-weight: 700;
+          letter-spacing: 0;
         }
         
         .display-1, .display-2, .display-3, .display-4, .display-5, .display-6 {
-          font-family: 'Playfair Display', serif !important;
-          font-weight: 800 !important;
-          letter-spacing: -0.02em !important;
+          font-family: 'Merienda', cursive !important;
+          font-weight: 700 !important;
+          letter-spacing: 0 !important;
         }
         
         .lead {
-          font-family: 'Merriweather', serif;
-          font-weight: 300;
+          font-family: 'Merienda', cursive;
+          font-weight: 400;
           line-height: 1.8;
         }
         
         .card-title, .card-text {
-          font-family: 'Source Serif Pro', serif;
+          font-family: 'Merienda', cursive;
         }
         
         p {
-          font-family: 'Source Serif Pro', serif;
+          font-family: 'Merienda', cursive;
           line-height: 1.8;
           font-size: 1.1rem;
         }
         
         .btn {
-          font-family: 'Inter', sans-serif;
+          font-family: 'Merienda', cursive;
           font-weight: 600;
-          letter-spacing: 0.5px;
-          text-transform: uppercase;
+          letter-spacing: 0;
+          text-transform: none;
         }
         
         .navbar, .footer {
-          font-family: 'Inter', sans-serif;
+          font-family: 'Merienda', cursive;
         }
         
         .feature-title {
-          font-family: 'Playfair Display', serif;
+          font-family: 'Merienda', cursive;
           font-weight: 700;
         }
         
         .stat-number {
-          font-family: 'Playfair Display', serif;
-          font-weight: 900;
+          font-family: 'Merienda', cursive;
+          font-weight: 700;
         }
         
         .quote-text {
-          font-family: 'Merriweather', serif;
-          font-style: italic;
+          font-family: 'Merienda', cursive;
+          font-style: normal;
         }
         
         .section-subtitle {
-          font-family: 'Merriweather', serif;
-          font-weight: 300;
-          letter-spacing: 1px;
-          text-transform: uppercase;
+          font-family: 'Merienda', cursive;
+          font-weight: 400;
+          letter-spacing: 0;
+          text-transform: none;
         }
         
         /* Farmer rental theme specific styles */
         .farm-theme-text {
-          font-family: 'Playfair Display', serif;
-          font-weight: 800;
+          font-family: 'Merienda', cursive;
+          font-weight: 700;
           color: #2c3e50;
         }
         
         .farm-theme-description {
-          font-family: 'Source Serif Pro', serif;
+          font-family: 'Merienda', cursive;
           color: #5d6d7e;
           line-height: 1.9;
         }
         
         .rustic-text {
-          font-family: 'Merriweather', serif;
+          font-family: 'Merienda', cursive;
           font-weight: 400;
           color: #4a5d23;
         }
         
         .modern-farm {
-          font-family: 'Inter', sans-serif;
+          font-family: 'Merienda', cursive;
           font-weight: 500;
-          letter-spacing: -0.01em;
+          letter-spacing: 0;
         }
         
         /* Gradient Text Styles */
@@ -361,8 +361,8 @@ export default function LandingPage() {
         }
         
         .harvest-heading {
-          font-family: 'Playfair Display', serif;
-          font-weight: 900;
+          font-family: 'Merienda', cursive;
+          font-weight: 700;
           background: linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF8C00 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
@@ -433,12 +433,12 @@ export default function LandingPage() {
                 transition={{ duration: 0.6, delay: 0.2 }}
                 className="d-flex gap-3 justify-content-center mb-5"
               >
-                <Button 
-                  size="lg" 
-                  onClick={handleLogin}
-                  className="px-5 py-3 fw-bold btn-gradient"
-                  style={{ 
-                    fontFamily: "'Inter', sans-serif", 
+                  <Button 
+                    size="lg" 
+                    onClick={handleLogin}
+                    className="px-5 py-3 fw-bold btn-gradient"
+                    style={{ 
+                    fontFamily: "'Merienda', cursive", 
                     letterSpacing: '1px',
                     border: 'none',
                     color: 'white'
@@ -452,7 +452,7 @@ export default function LandingPage() {
                   onClick={handleSignUp}
                   className="px-5 py-3 fw-bold"
                   style={{ 
-                    fontFamily: "'Inter', sans-serif", 
+                    fontFamily: "'Merienda', cursive", 
                     letterSpacing: '1px',
                     background: 'transparent',
                     border: '2px solid white',
@@ -639,7 +639,7 @@ export default function LandingPage() {
                 viewport={{ once: true }}
               >
                 <h2 className="display-4 fw-bold mb-4 gradient-harvest">
-                  Why Choose AgroRent Pro?
+                  Why Choose AgroConnect ?
                 </h2>
                 <p className="lead text-muted mb-4 gradient-earth" style={{ fontWeight: 400 }}>
                   We're committed to making agricultural equipment accessible and affordable for every farmer while helping owners maximize their equipment utilization.
@@ -751,7 +751,7 @@ export default function LandingPage() {
                       background: 'white',
                       border: 'none',
                       color: '#2ecc71',
-                      fontFamily: "'Inter', sans-serif",
+                      fontFamily: "'Merienda', cursive",
                       letterSpacing: '1px'
                     }}
                     onMouseEnter={(e) => {
@@ -771,7 +771,7 @@ export default function LandingPage() {
                     onClick={handleLogin}
                     className="px-5 py-3 fw-bold"
                     style={{ 
-                      fontFamily: "'Inter', sans-serif", 
+                      fontFamily: "'Merienda', cursive", 
                       letterSpacing: '1px',
                       border: '2px solid white',
                       color: 'white'

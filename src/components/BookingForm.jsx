@@ -11,19 +11,37 @@ const BookingForm = ({ onSubmit }) => {
             <Col md={6}>
               <Form.Group>
                 <Form.Label>Start Date</Form.Label>
-                <Form.Control type="date" required />
+                <Form.Control
+                  name="startDate"
+                  type="text"
+                  placeholder="dd/mm/yyyy"
+                  inputMode="numeric"
+                  pattern="\\d{2}/\\d{2}/\\d{4}"
+                  maxLength={10}
+                  autoComplete="off"
+                  required
+                />
               </Form.Group>
             </Col>
             <Col md={6}>
               <Form.Group>
                 <Form.Label>End Date</Form.Label>
-                <Form.Control type="date" required />
+                <Form.Control
+                  name="endDate"
+                  type="text"
+                  placeholder="dd/mm/yyyy"
+                  inputMode="numeric"
+                  pattern="\\d{2}/\\d{2}/\\d{4}"
+                  maxLength={10}
+                  autoComplete="off"
+                  required
+                />
               </Form.Group>
             </Col>
             <Col md={12}>
               <Form.Group>
-                <Form.Label>Delivery Location</Form.Label>
-                <Form.Control type="text" placeholder="Village, district" required />
+                <Form.Label>Farmer Drop Location</Form.Label>
+                <Form.Control type="text" placeholder="Your address or village, district" required />
               </Form.Group>
             </Col>
             <Col md={12}>

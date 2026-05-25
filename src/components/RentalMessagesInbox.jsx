@@ -1,7 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getApiErrorMessage } from "../api/http";
-import { getRentalMessages, listRentalsByFarmer, listRentalsByOwner, sendRentalMessage } from "../api/rentalApi";
+import {
+  getRentalMessages,
+  listRentalsByAgent,
+  listRentalsByFarmer,
+  listRentalsByOwner,
+  sendRentalMessage,
+} from "../api/rentalApi";
+import PaginationControls from "./PaginationControls";
 import { getCurrentUser } from "../utils/session";
 import {
   buildChatThread,
@@ -48,7 +55,11 @@ const RentalMessagesInbox = ({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [connectionState, setConnectionState] = useState("loading");
+  const [threadPage, setThreadPage] = useState(1);
+  const [messagePage, setMessagePage] = useState(1);
   const bottomRef = useRef(null);
+  const THREAD_PAGE_SIZE = 5;
+  const MESSAGE_PAGE_SIZE = 8;
 
   const loadThreads = async () => {
     setLoading(true);
@@ -56,9 +67,7 @@ const RentalMessagesInbox = ({
     setConnectionState("loading");
 
     try {
-      const rentals = isOwnerView
-        ? await listRentalsByOwner(currentUserId)
-        : await listRentalsByFarmer(currentUserId);
+      const rentals = isOwnerView ? await listRentalsByOwner(currentUserId) : await listRentalsByFarmer(currentUserId);
       const rentalList = Array.isArray(rentals) ? rentals : [];
       const cachedThreads = readChatThreads();
       const cachedLookup = new Map(
@@ -179,6 +188,20 @@ const RentalMessagesInbox = ({
     });
   }, [search, threads]);
 
+  const threadTotalPages = Math.max(1, Math.ceil(filteredThreads.length / THREAD_PAGE_SIZE));
+  const pagedThreads = filteredThreads.slice((threadPage - 1) * THREAD_PAGE_SIZE, threadPage * THREAD_PAGE_SIZE);
+  const activeMessages = selectedThread?.messages || [];
+  const messageTotalPages = Math.max(1, Math.ceil(activeMessages.length / MESSAGE_PAGE_SIZE));
+  const pagedMessages = activeMessages.slice((messagePage - 1) * MESSAGE_PAGE_SIZE, messagePage * MESSAGE_PAGE_SIZE);
+
+  useEffect(() => {
+    setThreadPage((currentPage) => Math.min(currentPage, threadTotalPages));
+  }, [threadTotalPages]);
+
+  useEffect(() => {
+    setMessagePage(1);
+  }, [selectedThread?.id]);
+
   const openThread = (threadId) => {
     setSelectedRentalId(threadId);
     const next = new URLSearchParams(searchParams);
@@ -258,8 +281,6 @@ const RentalMessagesInbox = ({
     }
   };
 
-  const activeMessages = selectedThread?.messages || [];
-
   return (
     <div className={isOwnerView ? "agr-page owner-dashboard" : "agr-page"}>
       <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
@@ -302,11 +323,10 @@ const RentalMessagesInbox = ({
               <div style={{ maxHeight: "60vh", overflowY: "auto" }}>
                 {loading ? (
                   <div className="p-3 text-muted">Loading conversations...</div>
-                ) : filteredThreads.length === 0 ? (
+                ) : pagedThreads.length === 0 ? (
                   <div className="p-3 text-muted">{emptyCopy}</div>
                 ) : (
-                  filteredThreads.map((thread) => {
-                    const lastMessage = thread.messages[thread.messages.length - 1];
+                  pagedThreads.map((thread) => {
                     const unread = isOwnerView ? thread.unreadForOwner || 0 : thread.unreadForFarmer || 0;
                     const isActive = thread.id === selectedRentalId;
 
@@ -320,10 +340,9 @@ const RentalMessagesInbox = ({
                         onClick={() => openThread(thread.id)}
                       >
                         <div className="d-flex justify-content-between align-items-start gap-2">
-                          <div className="min-w-0">
+                          <div className="flex-grow-1 min-w-0">
                             <div className="fw-semibold text-truncate">{thread.contactName}</div>
                             <div className="text-muted small text-truncate">{thread.equipmentName}</div>
-                            <div className="text-muted small text-truncate">{lastMessage?.text || "No messages yet"}</div>
                           </div>
                           <div className="text-end flex-shrink-0">
                             <div className="text-muted small">{formatStamp(getThreadStamp(thread))}</div>
@@ -334,6 +353,16 @@ const RentalMessagesInbox = ({
                     );
                   })
                 )}
+              </div>
+              <div className="p-3 border-top">
+                <PaginationControls
+                  currentPage={threadPage}
+                  totalPages={threadTotalPages}
+                  totalItems={filteredThreads.length}
+                  pageSize={THREAD_PAGE_SIZE}
+                  itemLabel="threads"
+                  onPageChange={setThreadPage}
+                />
               </div>
             </div>
           </div>
@@ -356,19 +385,13 @@ const RentalMessagesInbox = ({
                     <span className={`badge ${connectionState === "live" ? "bg-success" : "bg-secondary"}`}>
                       {connectionState === "live" ? "Live" : "Cached"}
                     </span>
-                    <Link
-                      to={`${isOwnerView ? "/owner" : "/farmer"}/messages?rentalId=${encodeURIComponent(selectedThread.id)}`}
-                      className="btn btn-outline-primary btn-sm"
-                    >
-                      Open thread
-                    </Link>
                   </div>
                 </div>
                 <div className="card-body" style={{ height: "55vh", overflowY: "auto" }}>
-                  {activeMessages.length === 0 ? (
+                  {pagedMessages.length === 0 ? (
                     <div className="text-muted small">No messages yet. Say hello!</div>
                   ) : (
-                    activeMessages.map((message) => {
+                    pagedMessages.map((message) => {
                       const senderRole = (message.senderRole || message.from || "").toLowerCase();
                       const isMine = senderRole === role || message.senderId === currentUserId;
 
@@ -394,6 +417,16 @@ const RentalMessagesInbox = ({
                     })
                   )}
                   <div ref={bottomRef} />
+                </div>
+                <div className="card-body pt-0 border-top">
+                  <PaginationControls
+                    currentPage={messagePage}
+                    totalPages={messageTotalPages}
+                    totalItems={activeMessages.length}
+                    pageSize={MESSAGE_PAGE_SIZE}
+                    itemLabel="messages"
+                    onPageChange={setMessagePage}
+                  />
                 </div>
                 <div className="card-footer bg-white">
                   <div className="d-flex gap-2">

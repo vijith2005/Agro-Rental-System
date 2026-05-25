@@ -35,6 +35,14 @@ export const ensureMyProfile = async (user) => {
   }
 };
 
+<<<<<<< HEAD
+export const listProfiles = async (params = {}) => {
+  const { data } = await profileClient.get("/profiles", { params });
+  return data;
+};
+
+=======
+>>>>>>> origin/main
 export const updateMyProfile = async ({
   name,
   phone,

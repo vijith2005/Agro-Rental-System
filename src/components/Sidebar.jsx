@@ -1,6 +1,11 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { normalizeRole } from "../utils/auth";
+import { clearSession } from "../utils/session";
+import {
+  DELIVERY_REMINDERS_UPDATED_EVENT,
+  readDeliveryReminders,
+} from "../utils/deliveryNotifications";
 
 const LeafIcon = ({ size = 22, color = "#E9C46A" }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -42,7 +47,6 @@ const ownerNav = [
 
 const deliveryNav = [
   { to: "/delivery", label: "Home", icon: "home" },
-  { to: "/delivery/pickups", label: "Pickups", icon: "calendar" },
   { to: "/delivery/deliveries", label: "Deliveries", icon: "box" },
   { to: "/delivery/returns", label: "Returns", icon: "credit" },
   { to: "/delivery/history", label: "History", icon: "user" },
@@ -52,7 +56,6 @@ const adminNav = [
   { to: "/admin", label: "Home", icon: "home" },
   { to: "/admin/users", label: "Users", icon: "user" },
   { to: "/admin/equipment", label: "Equipment", icon: "box" },
-  { to: "/admin/disputes", label: "Disputes", icon: "chat" },
 ];
 
 const Icon = ({ name }) => {
@@ -79,6 +82,7 @@ const Sidebar = ({ user }) => {
   const navigate = useNavigate();
   const displayName = user?.name || user?.email || "Guest";
   const role = normalizeRole(user?.role);
+  const [deliveryReminders, setDeliveryReminders] = useState(() => readDeliveryReminders());
   const navItems =
     role === "owner"
       ? ownerNav
@@ -89,12 +93,26 @@ const Sidebar = ({ user }) => {
       : farmerNav;
 
   const handleLogout = () => {
-    localStorage.removeItem("currentUser");
-    sessionStorage.removeItem("currentUser");
-    localStorage.removeItem("agro_token");
-    sessionStorage.removeItem("agro_token");
+    clearSession();
     navigate("/login");
   };
+
+  useEffect(() => {
+    if (role !== "delivery") return undefined;
+
+    const refreshReminders = () => {
+      setDeliveryReminders(readDeliveryReminders());
+    };
+
+    refreshReminders();
+    window.addEventListener(DELIVERY_REMINDERS_UPDATED_EVENT, refreshReminders);
+    window.addEventListener("storage", refreshReminders);
+
+    return () => {
+      window.removeEventListener(DELIVERY_REMINDERS_UPDATED_EVENT, refreshReminders);
+      window.removeEventListener("storage", refreshReminders);
+    };
+  }, [role]);
 
   const initials = displayName
     .split(" ")
@@ -128,6 +146,33 @@ const Sidebar = ({ user }) => {
           </NavLink>
         ))}
       </nav>
+
+      {role === "delivery" && (
+        <div className="agr-user-card agr-delivery-alert-card">
+          <div className="agr-delivery-alert-header">
+            <div>
+              <div className="agr-user-name" style={{ fontSize: 14 }}>Delivery alerts</div>
+              <div className="agr-user-role">{deliveryReminders.length} due soon</div>
+            </div>
+            <div className="agr-delivery-alert-badge">{deliveryReminders.length}</div>
+          </div>
+          <div className="agr-delivery-alert-list">
+            {deliveryReminders.length === 0 ? (
+              <div className="agr-delivery-alert-empty">No pickup reminders yet.</div>
+            ) : (
+              deliveryReminders.slice(0, 2).map((reminder) => (
+                <div key={reminder.id} className="agr-delivery-alert-item">
+                  <div className="agr-delivery-alert-title">{reminder.label}</div>
+                  <div className="agr-delivery-alert-meta">{reminder.meta}</div>
+                </div>
+              ))
+            )}
+          </div>
+          {deliveryReminders.length > 2 && (
+            <div className="agr-delivery-alert-footer">+{deliveryReminders.length - 2} more reminders</div>
+          )}
+        </div>
+      )}
 
       <div className="agr-user-card">
         <div className="agr-user-avatar">{initials}</div>

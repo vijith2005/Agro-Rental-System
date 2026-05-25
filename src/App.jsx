@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./App.css";
 
@@ -20,14 +21,12 @@ import OwnerRequests from "./pages/owners/OwnerRequests";
 import OwnerEarnings from "./pages/owners/OwnerEarnings";
 import OwnerMessages from "./pages/owners/OwnerMessages";
 import DeliveryDashboard from "./pages/delivery/DeliveryDashboard";
-import DeliveryPickups from "./pages/delivery/DeliveryPickups";
 import DeliveryDeliveries from "./pages/delivery/DeliveryDeliveries";
 import DeliveryReturns from "./pages/delivery/DeliveryReturns";
 import DeliveryHistory from "./pages/delivery/DeliveryHistory";
 import Admin from "./pages/admin/Admin";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminEquipment from "./pages/admin/AdminEquipment";
-import AdminDisputes from "./pages/admin/AdminDisputes";
 
 import ProtectedRoute from "./components/ProtectedRoute";
 import MainLayout from "./components/MainLayout";
@@ -40,6 +39,29 @@ function App() {
 
   return (
     <Router>
+      <Toaster
+        position="top-right"
+        gutter={12}
+        toastOptions={{
+          duration: 3500,
+          style: {
+            borderRadius: "12px",
+            padding: "12px 16px",
+            background: "#111827",
+            color: "#fff",
+          },
+          success: {
+            style: {
+              background: "#166534",
+            },
+          },
+          error: {
+            style: {
+              background: "#991b1b",
+            },
+          },
+        }}
+      />
       <Routes>
 
         <Route path="/" element={<LandingPage />} />
@@ -96,7 +118,7 @@ function App() {
           }
         >
           <Route index element={<DeliveryDashboard />} />
-          <Route path="pickups" element={<DeliveryPickups />} />
+          <Route path="pickups" element={<Navigate to="/delivery" replace />} />
           <Route path="deliveries" element={<DeliveryDeliveries />} />
           <Route path="returns" element={<DeliveryReturns />} />
           <Route path="history" element={<DeliveryHistory />} />
@@ -113,7 +135,7 @@ function App() {
           <Route index element={<Admin />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="equipment" element={<AdminEquipment />} />
-          <Route path="disputes" element={<AdminDisputes />} />
+          <Route path="disputes" element={<Navigate to="/admin" replace />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/farmer" replace />} />

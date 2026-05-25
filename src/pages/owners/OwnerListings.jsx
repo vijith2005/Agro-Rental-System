@@ -1,4 +1,8 @@
+<<<<<<< HEAD
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+=======
 import React, { useEffect, useMemo, useState } from "react";
+>>>>>>> origin/main
 import { Link } from "react-router-dom";
 import "../../styles/FarmerDashboard.css";
 import "../../styles/FarmerModules.css";
@@ -8,6 +12,9 @@ import { getCurrentUser } from "../../utils/session";
 import { notifyEquipmentUpdated } from "../../utils/equipmentEvents";
 import { MapContainer, Marker, TileLayer, useMapEvents } from "react-leaflet";
 import heroImage from "../../assets/hero.jpg";
+
+const CATEGORY_OPTIONS = ["Tractor", "Harvester", "Sprayer", "Seeder", "Pump"];
+const OTHER_CATEGORY_OPTION = "Others";
 
 const OwnerListings = () => {
   const [page, setPage] = useState(1);
@@ -26,6 +33,7 @@ const OwnerListings = () => {
   const [formState, setFormState] = useState({
     name: "",
     category: "Tractor",
+    customCategory: "",
     day: 800,
     location: "",
     lat: 11.0168,
@@ -33,7 +41,11 @@ const OwnerListings = () => {
     imageUrl: "",
   });
 
+<<<<<<< HEAD
+  const loadMyListings = useCallback(async () => {
+=======
   const loadMyListings = async () => {
+>>>>>>> origin/main
     setIsLoading(true);
     setLoadError("");
 
@@ -47,11 +59,19 @@ const OwnerListings = () => {
     } finally {
       setIsLoading(false);
     }
+<<<<<<< HEAD
+  }, [ownerKey]);
+
+  useEffect(() => {
+    loadMyListings();
+  }, [loadMyListings]);
+=======
   };
 
   useEffect(() => {
     loadMyListings();
   }, []);
+>>>>>>> origin/main
 
   const handleMapSelect = async (event) => {
     const { lat, lng } = event.latlng;
@@ -107,6 +127,35 @@ const OwnerListings = () => {
 
     if (!formState.name.trim()) return;
 
+<<<<<<< HEAD
+    const selectedCategory =
+      formState.category === OTHER_CATEGORY_OPTION ? formState.customCategory.trim() : formState.category;
+
+    if (!selectedCategory) {
+      setSaveError("Enter a custom category when you choose Others.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = {
+        name: formState.name.trim(),
+        category: selectedCategory,
+        description: "Owner listed equipment",
+        day: Number(formState.day) || 0,
+        week: Number(formState.day) ? Number(formState.day) * 6 : undefined,
+        month: Number(formState.day) ? Number(formState.day) * 24 : undefined,
+        location: formState.location || "Region",
+        rating: 4.5,
+        imageKey: "hero",
+        imageUrl: formState.imageUrl?.trim() || "",
+        ownerName: currentUser?.name || "Owner",
+        lat: Number(formState.lat) || 11.0168,
+        lng: Number(formState.lng) || 76.9558,
+        status: "AVAILABLE",
+      };
+
+=======
     setSaving(true);
     try {
       const payload = {
@@ -126,6 +175,7 @@ const OwnerListings = () => {
         status: "AVAILABLE",
       };
 
+>>>>>>> origin/main
       const created = await createEquipment(payload);
       const next = [created, ...myListings.filter((item) => item.id !== created.id)];
       setEquipments(next);
@@ -133,6 +183,10 @@ const OwnerListings = () => {
       setFormState({
         name: "",
         category: "Tractor",
+<<<<<<< HEAD
+        customCategory: "",
+=======
+>>>>>>> origin/main
         day: 800,
         location: "",
         lat: 11.0168,
@@ -207,23 +261,41 @@ const OwnerListings = () => {
               onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
             />
           </div>
+<<<<<<< HEAD
+=======
           <div className="form-field">
             <label>Product Image</label>
             <input type="file" accept="image/*" />
           </div>
+>>>>>>> origin/main
           <div className="form-field">
             <label>Category</label>
             <select
               value={formState.category}
-              onChange={(event) => setFormState((prev) => ({ ...prev, category: event.target.value }))}
+              onChange={(event) =>
+                setFormState((prev) => ({
+                  ...prev,
+                  category: event.target.value,
+                  customCategory: event.target.value === OTHER_CATEGORY_OPTION ? prev.customCategory : "",
+                }))
+              }
             >
-              <option>Tractor</option>
-              <option>Harvester</option>
-              <option>Sprayer</option>
-              <option>Seeder</option>
-              <option>Pump</option>
+              {CATEGORY_OPTIONS.map((option) => (
+                <option key={option}>{option}</option>
+              ))}
+              <option>{OTHER_CATEGORY_OPTION}</option>
             </select>
           </div>
+          {formState.category === OTHER_CATEGORY_OPTION && (
+            <div className="form-field">
+              <label>Custom category</label>
+              <input
+                value={formState.customCategory}
+                onChange={(event) => setFormState((prev) => ({ ...prev, customCategory: event.target.value }))}
+                placeholder="Enter product type"
+              />
+            </div>
+          )}
           <div className="form-field">
             <label>Price per day</label>
             <input

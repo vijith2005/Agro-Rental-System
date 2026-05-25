@@ -7,11 +7,20 @@ import fieldImage from "../../assets/farmerbg.jpg";
 import { listEquipment } from "../../api/equipmentApi";
 import { listRentalsByOwner } from "../../api/rentalApi";
 import { listPaymentsByOwner } from "../../api/paymentApi";
+<<<<<<< HEAD
+import { getStored, setStored, STORAGE_KEYS } from "../../utils/storage";
+=======
 import { getStored, STORAGE_KEYS } from "../../utils/storage";
+>>>>>>> origin/main
 import { getCurrentUser } from "../../utils/session";
 import { EQUIPMENT_UPDATED_EVENT } from "../../utils/equipmentEvents";
 import { RENTAL_UPDATED_EVENT } from "../../utils/rentalEvents";
 import { PAYMENT_UPDATED_EVENT } from "../../utils/paymentEvents";
+<<<<<<< HEAD
+import { formatBookingDate } from "../../utils/bookingDates";
+import { mergeRentalsById } from "../../utils/rentalCache";
+=======
+>>>>>>> origin/main
 
 const formatCurrency = (amount) =>
   `Rs ${new Intl.NumberFormat("en-IN").format(Number(amount) || 0)}`;
@@ -53,7 +62,10 @@ function OwnerDashboard() {
   const [rentals, setRentals] = useState(() => getStored(STORAGE_KEYS.rentals, []));
   const [payments, setPayments] = useState(() => getStored(STORAGE_KEYS.payments, []));
   const [loadError, setLoadError] = useState("");
+<<<<<<< HEAD
+=======
   const [paymentWarning, setPaymentWarning] = useState("");
+>>>>>>> origin/main
   const [activeSlide, setActiveSlide] = useState(0);
   const [pages, setPages] = useState({
     performance: 1,
@@ -130,18 +142,31 @@ function OwnerDashboard() {
     const loadRentals = async () => {
       const currentUser = getCurrentUser();
       const ownerId = currentUser?.email || "owner@demo.com";
+<<<<<<< HEAD
+      const cached = getStored(STORAGE_KEYS.rentals, []).filter(
+        (item) => (item.ownerId || "").toLowerCase() === ownerId.toLowerCase()
+      );
+
+      try {
+        const data = await listRentalsByOwner(ownerId);
+        const content = mergeRentalsById(Array.isArray(data) ? data : [], cached);
+=======
 
       try {
         const data = await listRentalsByOwner(ownerId);
         const content = Array.isArray(data) ? data : [];
+>>>>>>> origin/main
         if (!active) return;
         setRentals(content);
         setStored(STORAGE_KEYS.rentals, content);
       } catch {
         if (!active) return;
+<<<<<<< HEAD
+=======
         const cached = getStored(STORAGE_KEYS.rentals, []).filter(
           (item) => !item.ownerId || item.ownerId === ownerId
         );
+>>>>>>> origin/main
         setRentals(cached);
       }
     };
@@ -168,18 +193,24 @@ function OwnerDashboard() {
         if (!active) return;
         setPayments(content);
         setStored(STORAGE_KEYS.payments, content);
+<<<<<<< HEAD
+=======
         setPaymentWarning("");
+>>>>>>> origin/main
       } catch {
         if (!active) return;
         const cached = getStored(STORAGE_KEYS.payments, []).filter(
           (payment) => !payment.ownerId || payment.ownerId === ownerId
         );
         setPayments(cached);
+<<<<<<< HEAD
+=======
         if (cached.length === 0) {
           setPaymentWarning("Using cached payments because the backend is unavailable.");
         } else {
           setPaymentWarning("");
         }
+>>>>>>> origin/main
       }
     };
 
@@ -208,7 +239,15 @@ function OwnerDashboard() {
   );
 
   const pendingRequests = useMemo(
+<<<<<<< HEAD
+    () => ownerRentals.filter((rental) => ["REQUESTED", "PENDING"].includes((rental.status || "").toUpperCase())),
+    [ownerRentals]
+  );
+  const cancelledBookings = useMemo(
+    () => ownerRentals.filter((rental) => (rental.status || "").toUpperCase() === "CANCELLED").length,
+=======
     () => ownerRentals.filter((rental) => rental.status === "REQUESTED"),
+>>>>>>> origin/main
     [ownerRentals]
   );
 
@@ -251,6 +290,14 @@ function OwnerDashboard() {
         detail: "Requests waiting for your action",
       },
       {
+<<<<<<< HEAD
+        label: "Cancelled Bookings",
+        value: cancelledBookings,
+        detail: "Requests or bookings cancelled from your queue",
+      },
+      {
+=======
+>>>>>>> origin/main
         label: "Live Conversations",
         value: ownerThreads.length,
         detail: "Open chat threads with farmers",
@@ -266,7 +313,11 @@ function OwnerDashboard() {
         detail: "Paid value collected so far",
       },
     ],
+<<<<<<< HEAD
+    [cancelledBookings, locationCards.length, myListings.length, ownerThreads.length, pendingRequests.length, settledPayments.length, totalEarnings]
+=======
     [locationCards.length, myListings.length, ownerThreads.length, pendingRequests.length, settledPayments.length, totalEarnings]
+>>>>>>> origin/main
   );
 
   const messageCards = useMemo(
@@ -462,11 +513,18 @@ function OwnerDashboard() {
   };
 
   return (
+<<<<<<< HEAD
+      <div className="agr-page owner-dashboard owner-home-page">
+      {loadError && myListings.length === 0 && (
+        <div className="alert alert-warning mb-3">{loadError}</div>
+      )}
+=======
     <div className="agr-page owner-dashboard owner-home-page">
       {loadError && myListings.length === 0 && (
         <div className="alert alert-warning mb-3">{loadError}</div>
       )}
       {paymentWarning && <div className="alert alert-warning mb-3">{paymentWarning}</div>}
+>>>>>>> origin/main
       <div className="owner-topbar">
         <div>
           <div className="owner-title">Seller Central</div>
@@ -585,6 +643,13 @@ function OwnerDashboard() {
         <div className="owner-metric-card">
           <div className="metric-label">Total Earnings</div>
           <div className="metric-value">{formatCurrency(totalEarnings)}</div>
+<<<<<<< HEAD
+        </div>
+        <div className="owner-metric-card">
+          <div className="metric-label">Cancelled Bookings</div>
+          <div className="metric-value">{cancelledBookings}</div>
+=======
+>>>>>>> origin/main
         </div>
       </div>
 
@@ -633,7 +698,11 @@ function OwnerDashboard() {
                       {request.equipmentName || "Equipment"}
                     </div>
                     <div className="owner-list-meta">
+<<<<<<< HEAD
+                      {formatBookingDate(request.startDate) || "-"} to {formatBookingDate(request.endDate) || "-"} |{" "}
+=======
                       {request.startDate} to {request.endDate} |{" "}
+>>>>>>> origin/main
                       {request.farmerName || "Farmer"} |{" "}
                       {formatCurrency(request.totalAmount)}
                     </div>
@@ -718,6 +787,16 @@ function OwnerDashboard() {
                       Open thread
                     </Link>
                   </div>
+<<<<<<< HEAD
+                  <div className="d-flex flex-column align-items-end gap-2">
+                    {thread.unread > 0 ? (
+                      <span className="owner-pill alert">{thread.unread}</span>
+                    ) : (
+                      <span className="owner-pill">Ready</span>
+                    )}
+                  </div>
+=======
+>>>>>>> origin/main
                 </div>
               ))}
               {messageCards.length === 0 && (

@@ -57,7 +57,7 @@ export default function LoginPage() {
         console.warn("Profile service sync skipped during login.", profileError);
       }
 
-      pushAuthHistory("LOGIN");
+      pushAuthHistory("LOGIN", sessionUser);
       navigate(routeByRole(sessionUser.role));
     } catch (apiError) {
       setError(

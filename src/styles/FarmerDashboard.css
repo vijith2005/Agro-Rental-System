@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Serif+Display&family=Manrope:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Merienda:wght@400;500;600;700;800&display=swap");
 
 /* FarmDashboard.css - Enhanced with Animations */
 * {
@@ -11,8 +11,8 @@
   --dashboard-bg-image: url("../assets/farmerbg.jpg");
   --main-bg-image: url("../assets/hero.jpg");
   --dashboard-overlay: linear-gradient(115deg, rgba(10, 48, 12, 0.78), rgba(27, 112, 32, 0.72));
-  --ui-font: "Manrope", "Segoe UI", sans-serif;
-  --display-font: "DM Serif Display", "Plus Jakarta Sans", "Segoe UI", serif;
+  --ui-font: "Merienda", "Segoe UI", cursive;
+  --display-font: "Merienda", "Segoe UI", cursive;
   --glass-bg: rgba(255, 255, 255, 0.62);
   --glass-border: rgba(255, 255, 255, 0.6);
   --glass-shadow: 0 24px 50px rgba(10, 20, 14, 0.16);
@@ -727,7 +727,7 @@ body {
   padding: 18px;
 }
 .stat-pill .stat-number {
-  font-family: 'Playfair Display', serif;
+  font-family: "Merienda", cursive;
   font-size: 26px;
 }
 .stat-pill .stat-label {
@@ -1536,8 +1536,8 @@ body {
 }
 
 .owner-home-page {
-  --owner-heading-font: "Outfit", var(--ui-font);
-  --owner-display-font: "Cormorant Garamond", var(--display-font);
+  --owner-heading-font: var(--ui-font);
+  --owner-display-font: var(--display-font);
 }
 
 .owner-topbar {
@@ -1619,14 +1619,15 @@ body {
   position: relative;
   border-radius: 28px;
   overflow: hidden;
-  min-height: 340px;
+  height: clamp(360px, 42vw, 520px);
   background: linear-gradient(140deg, rgba(15, 31, 26, 0.95), rgba(25, 69, 39, 0.82));
   box-shadow: 0 26px 48px rgba(10, 20, 14, 0.2);
 }
 
 .owner-carousel-stage {
   position: relative;
-  min-height: 340px;
+  width: 100%;
+  height: 100%;
 }
 
 .owner-carousel-slide {
@@ -1636,7 +1637,7 @@ body {
   transform: scale(1.04);
   transition: opacity 0.7s ease, transform 0.7s ease;
   background-size: cover;
-  background-position: center;
+  background-position: center center;
   pointer-events: none;
 }
 
@@ -1658,7 +1659,7 @@ body {
   position: relative;
   z-index: 1;
   height: 100%;
-  padding: 34px 34px 32px;
+  padding: clamp(24px, 3vw, 34px);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -2142,6 +2143,10 @@ body {
     grid-template-columns: 1fr;
   }
 
+  .owner-carousel {
+    height: clamp(340px, 58vw, 480px);
+  }
+
   .owner-actions {
     justify-content: flex-start;
   }
@@ -2166,11 +2171,11 @@ body {
 
   .owner-carousel,
   .owner-carousel-stage {
-    min-height: 390px;
+    height: clamp(320px, 82vw, 400px);
   }
 
   .owner-carousel-content {
-    padding: 24px 22px 74px;
+    padding: 22px 18px 68px;
   }
 
   .owner-carousel-title {
@@ -2320,6 +2325,33 @@ body {
   margin-bottom: 12px;
 }
 
+.admin-chart-card {
+  border-radius: 18px;
+  border: 1px solid rgba(214, 225, 214, 0.9);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 250, 246, 0.96));
+  box-shadow: 0 18px 34px rgba(10, 20, 14, 0.08);
+}
+
+.analytics-track {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(31, 107, 17, 0.08);
+  overflow: hidden;
+}
+
+.analytics-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1f6b11, #56a12e);
+  box-shadow: 0 6px 12px rgba(31, 107, 17, 0.2);
+}
+
+.analytics-label {
+  color: #183025;
+  font-weight: 600;
+}
+
 /* Admin Dashboard */
 .admin-dashboard .admin-title {
   font-size: 28px;
@@ -2336,6 +2368,8 @@ body {
 .admin-card {
   border-radius: 16px;
   border: 1px solid rgba(218, 230, 238, 0.9);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 248, 0.96));
+  box-shadow: 0 14px 28px rgba(10, 20, 14, 0.08);
 }
 
 .admin-list {
@@ -2350,7 +2384,7 @@ body {
   justify-content: space-between;
   padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.92);
   border: 1px solid rgba(231, 238, 231, 0.9);
 }
 
@@ -2364,6 +2398,30 @@ body {
   height: 22px;
   background: #1f6b11;
   border-radius: 6px;
+}
+
+.admin-dashboard .dashboard-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(31, 107, 17, 0.12), rgba(196, 83, 0, 0.08));
+  border: 1px solid rgba(214, 225, 214, 0.8);
+  margin-top: 18px;
+}
+
+.admin-dashboard .dashboard-banner .banner-title {
+  font-weight: 800;
+  color: #12251d;
+  margin: 0;
+}
+
+.admin-dashboard .dashboard-banner .banner-meta {
+  color: #4f5f57;
+  font-size: 14px;
 }
 
 /* Modal backdrop helper */

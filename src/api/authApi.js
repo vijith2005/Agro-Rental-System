@@ -27,6 +27,14 @@ export const getMyAuthUser = async () => {
   return data;
 };
 
+<<<<<<< HEAD
+export const listUsers = async () => {
+  const { data } = await authClient.get("/users");
+  return data;
+};
+
+=======
+>>>>>>> origin/main
 export const updateMyAuthUser = async ({ name, email, phone }) => {
   const { data } = await authClient.put("/users/me", {
     name: name.trim(),

@@ -13,6 +13,14 @@ const imageMap = {
   farmer: farmerImage,
 };
 
+const isEquipmentAvailable = (item) => {
+  const status = (item?.status || "").toString().trim().toUpperCase();
+  if (status) {
+    return status === "AVAILABLE";
+  }
+  return item?.available !== false;
+};
+
 const categoriesList = ["All", "Tractor", "Harvester", "Sprayer", "Seeder", "Pump", "Cutter", "Other"];
 
 const EquipmentBrowse = () => {
@@ -72,6 +80,10 @@ const EquipmentBrowse = () => {
     const term = filters.search.toLowerCase();
 
     return equipments.filter((item) => {
+      if (!isEquipmentAvailable(item)) {
+        return false;
+      }
+
       const name = (item.name || "").toLowerCase();
       const category = (item.category || "").toLowerCase();
       const location = (item.location || "").toLowerCase();
@@ -122,7 +134,7 @@ const EquipmentBrowse = () => {
       >
         <div className="equipment-hero-body">
           <p className="eyebrow text-uppercase text-light mb-2">Equipment Marketplace</p>
-          <h2 className="text-white mb-2" style={{ fontFamily: "Playfair Display, serif" }}>
+          <h2 className="text-white mb-2" style={{ fontFamily: "Merienda, cursive" }}>
             Find the right machine for your next job
           </h2>
           <p className="text-light mb-0">Browse, filter, and book in a few clicks.</p>
@@ -226,7 +238,7 @@ const EquipmentBrowse = () => {
                 <div className="d-flex justify-content-between align-items-start mb-2">
                   <h5
                     className="card-title mb-0"
-                    style={{ fontFamily: "Playfair Display, serif", color: "var(--primary)" }}
+                    style={{ fontFamily: "Merienda, cursive", color: "var(--primary)" }}
                   >
                     {item.name}
                   </h5>
@@ -243,7 +255,9 @@ const EquipmentBrowse = () => {
                   Rs {item.day}/day
                 </div>
                 <div className="d-flex align-items-center gap-2 mb-3">
-                  <span className="badge bg-success">Available</span>
+                  <span className={`badge ${isEquipmentAvailable(item) ? "bg-success" : "bg-secondary"}`}>
+                    {isEquipmentAvailable(item) ? "Available" : "Booked"}
+                  </span>
                   <span className="badge bg-secondary">Rs {item.week}/week</span>
                   <span className="badge bg-secondary">Rs {item.month}/month</span>
                 </div>

@@ -20,6 +20,14 @@ export const getPaymentById = async (id) => {
   return data;
 };
 
+<<<<<<< HEAD
+export const listAllPayments = async () => {
+  const { data } = await paymentClient.get("/payments");
+  return data;
+};
+
+=======
+>>>>>>> origin/main
 export const listPaymentsByFarmer = async (farmerId) => {
   const { data } = await paymentClient.get(`/payments/farmer/${encodeURIComponent(farmerId)}`);
   return data;
